@@ -38,32 +38,10 @@ rword :: T.Text -> Parser ()
 rword w = lexeme (string' w *> notFollowedBy alphaNumChar)
 
 rws :: [String]
-rws = [ "var"
-      , "procedure"
-      , "function"
-      , "return"
-      , "is"
-      , "begin"
-      , "end"
-      , "if"
-      , "then"
-      , "else"
-      , "while"
-      , "loop"
-      , "call"
-      , "input"
-      , "output"
-      , "null"
-      , "break"
-      , "halt"
-      , "newline"
-      , "not"
-      , "false"
-      , "true"
-      , "and"
-      , "or"
-      , "integer"
-      , "boolean"
+rws = [ "and", "begin", "boolean", "break", "call", "else", "end"
+      , "false", "function", "halt", "if", "input", "integer"
+      , "is", "loop", "newline", "not", "null", "or", "output"
+      , "procedure", "return", "then", "true", "var", "while"
       ]
 
 idName :: Parser String
