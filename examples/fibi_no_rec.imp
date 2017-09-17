@@ -1,0 +1,26 @@
+function fibi(x : integer) return integer is
+  var a, b, c : integer;
+  var i : integer;
+begin
+  a = 1;
+  b = 1;
+  c = 0;
+  i = 3;
+
+  while i < x loop
+    c = a + b;
+    a = b;
+    b = c;
+    i = i + 1;
+  end loop;
+
+  return b;
+end fibi;
+
+procedure main () is
+  var n : integer;
+begin
+  output("Enter number: "); input(n);
+  output("Result is: "); output(fibi(n));
+  newline;
+end main;

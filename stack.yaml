@@ -1,0 +1,5 @@
+resolver: lts-9.2
+packages:
+- '.'
+extra-deps:
+- megaparsec-6.1.1

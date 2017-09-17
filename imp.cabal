@@ -1,0 +1,53 @@
+name:                imp
+version:             0.1.0.0
+synopsis:            Compiler for IMP programming language
+description:         This is a compiler for IMP programming language
+                     implemented in Haskell. It uses LLVM as compiler
+                     backend.
+homepage:            https://github.com/eugmes/imp#readme
+license:             MIT
+license-file:        LICENSE
+author:              Ievgenii Meshcheriakov
+maintainer:          eugen@debian.org
+copyright:           2017 Ievgenii Meshcheriakov
+category:            Compiler
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+source-repository head
+  type:                git
+  location:            https://github.com/eugmes/imp.git
+
+library
+  hs-source-dirs:      lib
+  exposed-modules:     IMP.AST
+                     , IMP.Parser
+                     , IMP.Codegen
+                     , IMP.Emit
+                     , IMP.SymbolTable
+  ghc-options:         -Wall -fno-warn-name-shadowing
+  build-depends:       base >= 4.7 && < 5
+                     , megaparsec == 6.*
+                     , text
+                     , llvm-hs-pure
+                     , llvm-hs
+                     , containers
+                     , mtl
+                     , bytestring
+                     , utf8-string
+  default-language:    Haskell2010
+
+executable impc
+  hs-source-dirs:      src
+  main-is:             Main.hs
+  ghc-options:         -rtsopts -Wall -fno-warn-name-shadowing
+  build-depends:       base
+                     , imp
+                     , megaparsec == 6.*
+                     , pretty-simple
+                     , text
+                     , llvm-hs
+                     , bytestring
+                     , optparse-applicative
+  default-language:    Haskell2010

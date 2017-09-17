@@ -1,0 +1,16 @@
+function sum(x, y : integer) return integer is
+var s : integer;
+begin
+    s = x + y;
+    return s;
+end sum;
+
+procedure main () is
+var a, b : integer;
+begin
+    output("Enter 2 integers: ");
+    input(a); input(b);
+    output("The sum is: ");
+    output(sum(a, b));
+    newline;
+end main;

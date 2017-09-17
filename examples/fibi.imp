@@ -1,0 +1,16 @@
+function fibi(n : integer) return integer is
+begin
+  if n < 2 then
+    return 1;
+  else
+    return fibi(n-2) + fibi(n - 1);
+  end if;
+end fibi;
+
+procedure main () is
+  var n : integer;
+begin
+  output("Enter number: "); input(n);
+  output("Result is: "); output(fibi(n));
+  newline;
+end main;

@@ -1,0 +1,5 @@
+procedure main () is
+begin
+    Output("Hello World!");
+    NewLine;
+end main;
