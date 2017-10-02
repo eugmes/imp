@@ -3,39 +3,54 @@
 module IMP.Parser (Parser, parser) where
 
 import IMP.AST
+import IMP.SourceLoc
+import IMP.Parser.Error
 import Control.Applicative
 import Control.Monad
-import Data.Void
 import Data.Char
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 import qualified Data.Text as T
+import Data.Functor.Syntax
+import qualified Data.Set as Set
 
-type Parser = Parsec Void T.Text
+type Parser = Parsec CustomError T.Text
+
+customFailure :: CustomError -> Parser a
+customFailure = fancyFailure . Set.singleton . ErrorCustom
 
 sc :: Parser ()
 sc = L.space space1 empty empty
 
-lexeme :: Parser a -> Parser a
-lexeme = L.lexeme sc
+located :: Parser a -> Parser (Located a)
+located m = Located <$> getPosition <*> m
 
-symbol :: T.Text -> Parser ()
-symbol = void . L.symbol sc
+lexeme' :: Parser a -> Parser a
+lexeme' = L.lexeme sc
+
+lexeme :: Parser a -> Parser (Located a)
+lexeme = located . lexeme'
+
+symbol' :: T.Text -> Parser ()
+symbol' = void . L.symbol sc
+
+symbol :: T.Text -> Parser (Located ())
+symbol = located . symbol'
 
 parens :: Parser a -> Parser a
-parens = between (symbol "(") (symbol ")")
+parens = between (symbol' "(") (symbol' ")")
 
 decimal :: Integral a => Parser a
-decimal = lexeme L.decimal
+decimal = lexeme' L.decimal
 
-stringLiteral :: Parser String
+stringLiteral :: Parser (Located String)
 stringLiteral = lexeme stringLiteral'
   where
     stringLiteral' = char '"' >> manyTill L.charLiteral (char '"')
 
 rword :: T.Text -> Parser ()
-rword w = lexeme (string' w *> notFollowedBy alphaNumChar)
+rword w = void $ lexeme' (string' w *> notFollowedBy alphaNumChar)
 
 rws :: [String]
 rws = [ "and", "begin", "boolean", "break", "call", "else", "end"
@@ -44,26 +59,28 @@ rws = [ "and", "begin", "boolean", "break", "call", "else", "end"
       , "procedure", "return", "then", "true", "var", "while"
       ]
 
-idName :: Parser String
-idName = (lexeme . try) (p >>= check)
+idName :: Parser (Located String)
+idName = do
+    tok <- lookAhead p
+    check tok
+    lexeme p
   where
     p = (:) <$> letterChar <*> many alphaNumChar
-    check x = if map toLower x `elem` rws
-                  then fail $ "keyword " ++ show x ++ " cannot be an identifier"
-                  else return x
+    check x = when (map toLower x `elem` rws) $
+                customFailure $ RWordAsIdentifier x
 
 comma, colon, semicolon, equals :: Parser ()
-comma = symbol ","
-colon = symbol ":"
-semicolon = symbol ";"
-equals = symbol "="
+comma = symbol' ","
+colon = symbol' ":"
+semicolon = symbol' ";"
+equals = symbol' "="
 
-identifier :: Parser ID
-identifier = ID . map toLower <$> idName <?> "identifier"
+identifier :: Parser (Located ID)
+identifier = ID . map toLower <$$> idName <?> "identifier"
 
-typeName :: Parser Type
-typeName  = IntegerType <$ rword "integer"
-        <|> BooleanType <$ rword "boolean"
+typeName :: Parser (Located Type)
+typeName  = located (IntegerType <$ rword "integer")
+        <|> located (BooleanType <$ rword "boolean")
 
 bool :: Parser Bool
 bool = False <$ rword "false"
@@ -105,7 +122,7 @@ varDec :: Parser VarDec
 varDec = VarDec <$> (rword "var" *> (identifier `sepBy` comma) <* colon) <*> typeName
 
 varDecs :: Parser [VarDec]
-varDecs = varDec `endBy` semicolon 
+varDecs = varDec `endBy` semicolon
 
 subroutine :: Parser Subroutine
 subroutine = procedure <|> function
@@ -113,32 +130,35 @@ subroutine = procedure <|> function
 subroutines :: Parser [Subroutine]
 subroutines = subroutine `endBy` semicolon
 
+checkSubName :: Located ID -> Parser ()
+checkSubName name = do
+    endName <- unLoc <$> lookAhead identifier
+    when (unLoc name /= endName) $
+        customFailure $ EndMismatch name endName
+    void identifier
+
 procedure :: Parser Subroutine
-procedure = do 
+procedure = do
     rword "procedure"
-    name@(ID startName) <- identifier
+    name <- identifier
     params <- parens paramLists
     rword "is"
     vars <- varDecs
     body <- procBody
-    ID endName <- identifier
-    when (startName /= endName) $
-        fail $ "Procedure name mismatch after end. Expecting " ++ show startName ++ " but found " ++ show endName
+    checkSubName name
     return $ Procedure name params vars body
 
 function :: Parser Subroutine
 function = do
     rword "function"
-    name@(ID startName) <- identifier
+    name <- identifier
     params <- parens paramLists
     rword "return"
     returnType <- typeName
     rword "is"
     vars <- varDecs
     body <- procBody
-    ID endName <- identifier
-    when (startName /= endName) $
-        fail $ "Function name mismatch after end. Expecting " ++ show startName ++ " but found " ++ show endName
+    checkSubName name
     return $ Function name params returnType vars body
 
 procBody :: Parser [Statement]

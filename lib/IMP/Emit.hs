@@ -3,7 +3,9 @@
 module IMP.Emit (codegenProgram) where
 
 import qualified IMP.AST as I
+import IMP.AST (getID)
 import IMP.Codegen
+import IMP.SourceLoc
 import qualified LLVM.AST as AST
 import LLVM.AST hiding (type')
 import qualified LLVM.AST.Type as Type
@@ -19,25 +21,22 @@ codegenProgram (I.Program vars subs) = do
     finalizeLLVM
 
 codegenVars :: I.VarDec -> LLVM ()
-codegenVars (I.VarDec names t) = mapM_ (codegenVar t) names
+codegenVars (I.VarDec names t) = mapM_ (defineVar $ unLoc t) names
 
-codegenVar :: I.Type -> I.ID -> LLVM ()
-codegenVar t (I.ID name) = defineVar t name
-
-toSig :: [I.ParamList] -> [(I.Type, String)]
+toSig :: [I.ParamList] -> [(I.Type, Located I.ID)]
 toSig = concatMap toSig'
   where
-    toSig' (I.ParamList ids ty) = map (toSig'' ty) ids
-    toSig'' t (I.ID name) = (t, name)
+    toSig' (I.ParamList ids ty) = map (toSig'' $ unLoc ty) ids
+    toSig'' t name = (t, name)
 
 codegenSubDecl :: I.Subroutine -> LLVM ()
-codegenSubDecl (I.Procedure (I.ID name) params _ _) =
+codegenSubDecl (I.Procedure name params _ _) =
     declareProc name $ fst <$> toSig params
 
-codegenSubDecl (I.Function (I.ID name) params retty _ _) =
-    declareFun retty name $ fst <$> toSig params
+codegenSubDecl (I.Function name params retty _ _) =
+    declareFun (unLoc retty) name $ fst <$> toSig params
 
-codegenSub' :: String -> Maybe I.Type -> [I.ParamList] -> [I.VarDec] -> [I.Statement] -> LLVM ()
+codegenSub' :: Located I.ID -> Maybe I.Type -> [I.ParamList] -> [I.VarDec] -> [I.Statement] -> LLVM ()
 codegenSub' name retty params vars body = do
     blocks <- execCodegen cg
     defineSub retty name args blocks
@@ -54,11 +53,11 @@ codegenSub' name retty params vars body = do
                         return $ Just (t, op)
 
         setExitBlock retval exit
-        
+
         forM_ args $ \(ty, a) -> do
             let t = typeToLLVM ty
-            var <- alloca (a ++ ".addr") t
-            store t var $ local t $ mkName a
+            var <- alloca (getID (unLoc a) ++ ".addr") t
+            store t var $ local t $ mkName $ getID $ unLoc a
             assign (SymbolVariable ty) a var
         codegenLocals vars
         mapM_ codegenStatement body
@@ -70,24 +69,24 @@ codegenSub' name retty params vars body = do
             Just (ty, op) -> load (typeToLLVM ty) op >>= ret . Just
 
 codegenSub :: I.Subroutine -> LLVM ()
-codegenSub (I.Procedure (I.ID name) params vars body) = do
-    when ((name == "main") && not (null params)) $
+codegenSub (I.Procedure name params vars body) = do
+    when ((unLoc name == I.ID "main") && not (null params)) $
         error "main should be a procedure with no arguments"
     codegenSub' name Nothing params vars body
 
-codegenSub (I.Function (I.ID name) params retty vars body) = do
-    when (name == "main") $ error "main should be a procedure"
-    codegenSub' name (Just retty) params vars body
+codegenSub (I.Function name params retty vars body) = do
+    when (unLoc name == I.ID "main") $ error "main should be a procedure"
+    codegenSub' name (Just $ unLoc retty) params vars body
 
 codegenLocals :: [I.VarDec] -> Codegen ()
 codegenLocals = mapM_ codegenLocals'
 
 codegenLocals' :: I.VarDec -> Codegen ()
-codegenLocals' (I.VarDec names ty) = mapM_ (codegenLocal ty) names
+codegenLocals' (I.VarDec names ty) = mapM_ (codegenLocal $ unLoc ty) names
 
-codegenLocal :: I.Type -> I.ID -> Codegen ()
-codegenLocal ty (I.ID name) = do
-    var <- alloca name $ typeToLLVM ty
+codegenLocal :: I.Type -> Located I.ID -> Codegen ()
+codegenLocal ty name = do
+    var <- alloca (getID $ unLoc name) $ typeToLLVM ty
     assign (SymbolVariable ty) name var
 
 typeCheck :: I.Type -> I.Type -> Codegen ()
@@ -136,7 +135,7 @@ codegenStatement (I.IfStatement cond ifTrue ifFalse) = do
             ifExitB <- addBlock "if.exit"
             ifTrueB <- maybeGenBlock "if.true" ifExitB ifTrue
             ifFalseB <- maybeGenBlock "if.false" ifExitB ifFalse
-            
+
             cbr op ifTrueB ifFalseB
 
             setBlock ifExitB
@@ -158,8 +157,8 @@ codegenStatement (I.WhileStatement cond body) = do
             setBlock whileExitB
         _ -> error "Boolean expression expected as while statement condition"
 
-codegenStatement (I.AssignStatement (I.ID name) exp) = do
-    (varSymType, varPtr) <- getvar name
+codegenStatement (I.AssignStatement name exp) = do
+    (varSymType, varPtr) <- getvar $ unLoc name
     varType <- case varSymType of
         SymbolVariable ty -> return ty
         _ -> error $ show name ++ " is not a variable"
@@ -167,15 +166,15 @@ codegenStatement (I.AssignStatement (I.ID name) exp) = do
     typeCheck varType expType
     store (typeToLLVM varType) varPtr op
 
-codegenStatement (I.CallStatement (I.ID name) exps) = do
-    (ty, proc) <- getvar name
+codegenStatement (I.CallStatement name exps) = do
+    (ty, proc) <- getvar $ unLoc name
     case ty of
         SymbolVariable _ -> error "Attempt to call a variable"
         SymbolFunction _ _ -> error "Attempt to call a function as procedure"
         SymbolProcedure args -> void $ codegenSubCall proc Type.void args exps
 
-codegenStatement (I.InputStatement (I.ID name)) = do
-    (ty, ptr) <- getvar name
+codegenStatement (I.InputStatement name) = do
+    (ty, ptr) <- getvar $ unLoc name
     case ty of
         SymbolVariable t -> do
             op <- case t of
@@ -192,7 +191,7 @@ codegenStatement (I.OutputStatement (I.Exp exp)) = do
     void $ apiCall api [op]
 
 codegenStatement (I.OutputStatement (I.Str str)) = do
-    opPtr <- newString str
+    opPtr <- newString $ unLoc str
     void $ apiCall CallOutputString [opPtr]
 
 codegenStatement I.NullStatement = return ()
@@ -279,16 +278,16 @@ codegenExpression (I.BoolExpression val) =
   where
     op = if val then constTrue else constFalse
 
-codegenExpression (I.IdExpression (I.ID name)) = do
-    (ty, ptr) <- getvar name
+codegenExpression (I.IdExpression name) = do
+    (ty, ptr) <- getvar $ unLoc name
     case ty of
         SymbolVariable t -> do
             op <- load (typeToLLVM t) ptr
             return (t, op)
         _ -> error "Attempt to read value of a subroutine"
 
-codegenExpression (I.CallExpression (I.ID name) exps) = do
-    (ty, fun) <- getvar name
+codegenExpression (I.CallExpression name exps) = do
+    (ty, fun) <- getvar $ unLoc name
     case ty of
         SymbolVariable _ -> error "Attempt to call a variable"
         SymbolProcedure _ -> error "Attempt to call a procedure as function"

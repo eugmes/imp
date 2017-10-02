@@ -45,7 +45,9 @@ module IMP.Codegen
     ) where
 
 import qualified IMP.AST as I
+import IMP.AST (getID)
 import qualified IMP.SymbolTable as Tab
+import IMP.SourceLoc
 import qualified LLVM.AST as AST
 import LLVM.AST hiding (type')
 import LLVM.AST.Type hiding (void)
@@ -101,7 +103,7 @@ stdCallArgs _ = []
 
 type SymbolTableEntry = (SymbolType, Operand)
 
-type SymbolTable = Tab.SymbolTable String SymbolTableEntry
+type SymbolTable = Tab.SymbolTable I.ID SymbolTableEntry
 
 type Names = Map.Map String Int
 
@@ -124,7 +126,7 @@ data CodegenState = CodegenState
                   -- |^ Count of unnamed instructions
                   , names :: Names
                   -- |^ Name supply
-                  , stringCount :: Word 
+                  , stringCount :: Word
                   -- |^ Count of emitted strings
                   , strings :: Map.Map Name U8.ByteString
                   -- |^ Emitted strings
@@ -203,7 +205,7 @@ withLoopExit newExitB m = do
     modify $ \s -> s { loopExitBlock = oldExitB }
     return r
 
-data LLVMState = LLVMState 
+data LLVMState = LLVMState
                { currentModule :: AST.Module
                , globalSymtab :: SymbolTable
                , globalStringsCount :: Word
@@ -218,7 +220,7 @@ newLLVMState :: AST.Module -> LLVMState
 newLLVMState m = LLVMState m Tab.empty 0 Map.empty Set.empty
 
 runLLVM :: AST.Module -> LLVM a -> AST.Module
-runLLVM md (LLVM m) = currentModule $ execState m (newLLVMState md) 
+runLLVM md (LLVM m) = currentModule $ execState m (newLLVMState md)
 
 emptyModule :: String -> FilePath -> AST.Module
 emptyModule label sourceFile = defaultModule { moduleName = fromString label
@@ -241,12 +243,14 @@ typeToLLVM I.IntegerType = integer
 typeToLLVM I.BooleanType = boolean
 
 -- | Add symbol to the global symbol table
-addSym :: SymbolType -> Type -> String -> LLVM ()
+--
+-- TODO Insert location information into symbol table
+addSym :: SymbolType -> Type -> Located I.ID -> LLVM ()
 addSym st lt n = do
     syms <- gets globalSymtab
-    let sym = (st, ConstantOperand $ GlobalReference lt (mkName n))
-    case Tab.insert n sym syms of
-        Left _ -> error $ "Attempt to redefine global symbol " ++ n
+    let sym = (st, ConstantOperand $ GlobalReference lt (mkName $ getID $ unLoc n))
+    case Tab.insert (unLoc n) sym syms of
+        Left _ -> error $ "Attempt to redefine global symbol " ++ getID (unLoc n)
         Right syms' -> modify $ \s -> s { globalSymtab = syms' }
 
 -- | Add global definition
@@ -258,26 +262,27 @@ addDefn d = do
     modify $ \s -> s { currentModule = m { moduleDefinitions = defs ++ [d] }}
 
 -- | Declares function in global symbol table
-declareFun :: I.Type -> String -> [I.Type] -> LLVM ()
+declareFun :: I.Type -> Located I.ID -> [I.Type] -> LLVM ()
 declareFun retty label argtys = addSym symt t label
   where
     symt = SymbolFunction retty argtys
     t = typeToLLVM retty
 
 -- | Declares procedure in global symbol table
-declareProc :: String -> [I.Type] -> LLVM ()
+declareProc :: Located I.ID -> [I.Type] -> LLVM ()
 declareProc label argtys = addSym symt Type.void label
   where
     symt = SymbolProcedure argtys
 
 -- | Adds global function definition
-defineSub :: Maybe I.Type -> String -> [(I.Type, String)] -> [BasicBlock] -> LLVM ()
+defineSub :: Maybe I.Type -> Located I.ID -> [(I.Type, Located I.ID)] -> [BasicBlock] -> LLVM ()
 defineSub retty label argtys body = addDefn def
   where
     t = maybe Type.void typeToLLVM retty
     def = GlobalDefinition $
-            functionDefaults { name = mkName label
-                             , parameters = ([Parameter (typeToLLVM ty) (mkName nm) [] | (ty, nm) <- argtys], False)
+            functionDefaults { name = (mkName . getID . unLoc) label
+                             , parameters = ([Parameter (typeToLLVM ty) ((mkName . getID . unLoc)  nm) []
+                                                     | (ty, nm) <- argtys], False)
                              , returnType = t
                              , basicBlocks = body
                              }
@@ -285,10 +290,10 @@ defineSub retty label argtys body = addDefn def
 -- | Add global variable definition
 --
 -- Also adds this variable to symbol table
-defineVar :: I.Type -> String -> LLVM ()
+defineVar :: I.Type -> Located I.ID -> LLVM ()
 defineVar ty label = addSym (SymbolVariable ty) t label >> addDefn def
   where
-    n = mkName label
+    n = mkName $ getID $ unLoc label
     t = typeToLLVM ty
     def = GlobalDefinition $ globalVariableDefaults { name = n, type' = t }
 
@@ -354,16 +359,16 @@ uniqueName nm ns =
 local :: Type -> Name -> Operand
 local = LocalReference
 
-assign :: SymbolType -> String -> Operand -> Codegen ()
+assign :: SymbolType -> Located I.ID -> Operand -> Codegen ()
 assign ty var x = do
     syms <- gets symtab
-    case Tab.insert var (ty, x) syms of
+    case Tab.insert (unLoc var) (ty, x) syms of
         Left _ ->
             error $ "Attempt to override local definition: " ++ show var
         Right syms' ->
             modify $ \s -> s { symtab = syms' }
 
-getvar :: String -> Codegen (SymbolType, Operand)
+getvar :: I.ID -> Codegen (SymbolType, Operand)
 getvar var = do
     syms <- gets symtab
     case Tab.lookup var syms of

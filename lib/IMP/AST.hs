@@ -1,26 +1,28 @@
 module IMP.AST where
 
+import IMP.SourceLoc
+
 data Program = Program [VarDec] [Subroutine] deriving Show
 
-data VarDec = VarDec [ID] Type deriving Show
+data VarDec = VarDec [Located ID] (Located Type) deriving Show
 
-newtype ID = ID String deriving Show
+newtype ID = ID {getID :: String} deriving (Show, Eq, Ord)
 
 data Type = IntegerType | BooleanType deriving (Show, Eq)
 
 newtype Number = Number Integer deriving Show
 
-data Subroutine = Procedure ID [ParamList] [VarDec] [Statement]
-                | Function ID [ParamList] Type [VarDec] [Statement]
+data Subroutine = Procedure (Located ID) [ParamList] [VarDec] [Statement]
+                | Function (Located ID) [ParamList] (Located Type) [VarDec] [Statement]
                 deriving Show
 
-data ParamList = ParamList [ID] Type deriving Show
+data ParamList = ParamList [Located ID] (Located Type) deriving Show
 
 data Statement = IfStatement Expression [Statement] [Statement]
                | WhileStatement Expression [Statement]
-               | AssignStatement ID Expression
-               | CallStatement ID [Expression]
-               | InputStatement ID
+               | AssignStatement (Located ID) Expression
+               | CallStatement (Located ID) [Expression]
+               | InputStatement (Located ID)
                | OutputStatement ExpressionOrString
                | NullStatement
                | BreakStatement
@@ -31,14 +33,14 @@ data Statement = IfStatement Expression [Statement] [Statement]
                deriving Show
 
 data ExpressionOrString = Exp Expression
-                        | Str String deriving Show
+                        | Str (Located String) deriving Show
 
 data Expression = UnOpExp UnaryOp Expression
                 | BinOpExp Expression BinaryOp Expression
                 | NumberExpression Number
                 | BoolExpression Bool
-                | IdExpression ID
-                | CallExpression ID [Expression]
+                | IdExpression (Located ID)
+                | CallExpression (Located ID) [Expression]
                 deriving Show
 
 data UnaryOp = OpNot | OpNeg deriving (Show, Eq)
