@@ -4,9 +4,11 @@ module Main where
 
 import IMP.Parser
 import IMP.Codegen
+import IMP.Codegen.Error
 import IMP.Emit
 import IMP.AST (Program)
 import Text.Pretty.Simple (pShow, pShowNoColor)
+import Data.Text (Text)
 import qualified Data.Text.IO as TIO
 import qualified Data.Text.Lazy.IO as TLIO
 import qualified Text.Megaparsec as P
@@ -42,16 +44,16 @@ options = Options
   <*> optional (option str (short 'o' <> metavar "FILE" <> help "Redirect output to FILE"))
   <*> optional (option auto (short 'O' <> metavar "LEVEL" <> help "Set optimization level"))
 
-genCode :: Options -> FilePath -> Program -> IO ()
-genCode o name pgm =
+genCode :: Options -> Text -> FilePath -> Program -> IO ()
+genCode o text name pgm =
   withContext $ \context ->
     withHostTargetMachine $ \target -> do
       dataLayout <- getTargetMachineDataLayout target
       targetTriple <- getTargetMachineTriple target
       let mod = emptyModule name name dataLayout targetTriple
-      case execLLVM mod $ codegenProgram pgm of
+      case execLLVM name mod $ codegenProgram pgm of
         Left err -> do
-          putStrLn $ "error: " ++ P.showErrorComponent err
+          putStrLn $ locatedErrorPretty text err
           exitFailure
         Right ast ->
           withModuleFromAST context ast $ \m -> do
@@ -83,7 +85,7 @@ run o = do
     Right tree ->
       case lastStage o of
         ParseStage -> outputTree o tree
-        _ -> genCode o fileName tree `catch` \(VerifyException msg) -> do
+        _ -> genCode o text fileName tree `catch` \(VerifyException msg) -> do
                putStrLn "Verification exception:"
                putStrLn msg
                exitFailure

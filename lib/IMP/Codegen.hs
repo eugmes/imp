@@ -23,7 +23,7 @@ module IMP.Codegen
     , store
     , load
     , local
-    , assign
+    , defineLocalVar
     , setExitBlock
     , setBlock
     , br
@@ -33,7 +33,7 @@ module IMP.Codegen
     , entry
     , call
     , withLoopExit
-    , getvar
+    , getVar
     , apiCall
     , newString
     , exit
@@ -162,6 +162,7 @@ data CodegenState = CodegenState
                   -- |^ Emitted strings
                   , apis :: Set.Set StandardCall
                   -- |^ Used standard calls
+                  , currentLocation :: SourcePos
                   } deriving Show
 
 data BlockState = BlockState
@@ -177,13 +178,23 @@ emptyBlock :: Int -> BlockState
 emptyBlock ix = BlockState ix [] Nothing
 
 newtype Codegen a = Codegen
-                  { runCodegen :: StateT CodegenState (Except CodegenError) a
+                  { runCodegen :: StateT CodegenState (Except (Located CodegenError)) a
                   } deriving ( Functor
                              , Applicative
                              , Monad
-                             , MonadError CodegenError
+                             , MonadError (Located CodegenError)
                              , MonadState CodegenState
                              )
+
+instance MonadLoc Codegen where
+  withLoc f x = do
+    oldLoc <- gets currentLocation
+    modify $ \s -> s { currentLocation = getLoc x }
+    r <- f $ unLoc x
+    modify $ \s -> s { currentLocation = oldLoc }
+    return r
+
+  currentLoc = gets currentLocation
 
 sortBlocks :: [(Name, BlockState)] -> [(Name, BlockState)]
 sortBlocks = sortBy (compare `on` (idx . snd))
@@ -195,14 +206,14 @@ makeBlock :: (Name, BlockState) -> LLVM BasicBlock
 makeBlock (l, BlockState _ s t) =
   case t of
     Just term -> return $ BasicBlock l (reverse s) term
-    Nothing -> throwError $ InternalError $ printf "Block has no terminator: '%s'."  (show l)
+    Nothing -> throwLocatedError $ InternalError $ printf "Block has no terminator: '%s'."  (show l)
 
 entryBlockName, exitBlockName :: String
 entryBlockName = "entry"
 exitBlockName = "exit"
 
-newCodegen :: LLVM CodegenState
-newCodegen = do
+newCodegen :: SourcePos -> LLVM CodegenState
+newCodegen pos = do
     syms <- gets globalSymtab
     strCount <- gets globalStringsCount
     strs <- gets globalStrings -- TODO check if this is really needed
@@ -221,11 +232,13 @@ newCodegen = do
                 , stringCount = strCount
                 , strings = strs
                 , apis = usedCalls
+                , currentLocation = pos
                 }
 
 execCodegen :: Codegen a -> LLVM [BasicBlock]
 execCodegen m = do
-    cg <- newCodegen
+    pos <- currentLoc
+    cg <- newCodegen pos
     let res = runExcept $ execStateT (runCodegen m) cg
     case res of
       Left err -> throwError err
@@ -251,16 +264,31 @@ data LLVMState = LLVMState
                , globalStrings :: Map.Map Name U8.ByteString
                , globalUsedCalls :: Set.Set StandardCall
                , globalMetadataCount :: Word
+               , globalLocation :: SourcePos
                } deriving Show
 
-newtype LLVM a = LLVM { runLLVM :: StateT LLVMState (Except CodegenError) a }
-    deriving (Functor, Applicative, Monad, MonadState LLVMState, MonadError CodegenError)
+newtype LLVM a = LLVM { runLLVM :: StateT LLVMState (Except (Located CodegenError)) a }
+    deriving ( Functor
+             , Applicative
+             , Monad
+             , MonadState LLVMState
+             , MonadError (Located CodegenError))
 
-newLLVMState :: AST.Module -> LLVMState
-newLLVMState m = LLVMState m Tab.empty 0 Map.empty Set.empty 0
+instance MonadLoc LLVM where
+  withLoc f x = do
+    oldLoc <- gets globalLocation
+    modify $ \s -> s { globalLocation = getLoc x }
+    r <- f $ unLoc x
+    modify $ \s -> s { globalLocation = oldLoc }
+    return r
 
-execLLVM :: AST.Module -> LLVM a -> Either CodegenError AST.Module
-execLLVM md m = fmap currentModule $ runExcept $ execStateT (runLLVM m) (newLLVMState md)
+  currentLoc = gets globalLocation
+
+newLLVMState :: FilePath -> AST.Module -> LLVMState
+newLLVMState fileName m = LLVMState m Tab.empty 0 Map.empty Set.empty 0 (initialPos fileName)
+
+execLLVM :: FilePath -> AST.Module -> LLVM a -> Either (Located CodegenError) AST.Module
+execLLVM fileName md m = fmap currentModule $ runExcept $ execStateT (runLLVM m) (newLLVMState fileName md)
 
 emptyModule :: String -> FilePath -> DataLayout -> ShortByteString -> AST.Module
 emptyModule label sourceFile dataLayout targetTriple = defaultModule
@@ -290,12 +318,12 @@ typeToLLVM I.BooleanType = boolean
 -- | Add symbol to the global symbol table
 --
 -- TODO Insert location information into symbol table
-addSym :: SymbolType -> Type -> Located I.ID -> LLVM ()
+addSym :: SymbolType -> Type -> I.ID -> LLVM ()
 addSym st lt n = do
     syms <- gets globalSymtab
-    let sym = (st, ConstantOperand $ GlobalReference lt (mkName $ getID $ unLoc n))
-    case Tab.insert (unLoc n) sym syms of
-        Left _ -> throwError $ GlobalRedefinition (unLoc n)
+    let sym = (st, ConstantOperand $ GlobalReference lt (mkName $ getID n))
+    case Tab.insert n sym syms of
+        Left _ -> throwLocatedError $ GlobalRedefinition n
         Right syms' -> modify $ \s -> s { globalSymtab = syms' }
 
 -- | Add global definition
@@ -307,25 +335,25 @@ addDefn d = do
     modify $ \s -> s { currentModule = m { moduleDefinitions = defs ++ [d] }}
 
 -- | Declares function in global symbol table
-declareFun :: I.Type -> Located I.ID -> [I.Type] -> LLVM ()
-declareFun retty label argtys = addSym symt t label
+declareFun :: I.ID -> I.Type -> [I.Type] -> LLVM ()
+declareFun label retty argtys = addSym symt t label
   where
     symt = SymbolFunction retty argtys
     t = typeToLLVM retty
 
 -- | Declares procedure in global symbol table
-declareProc :: Located I.ID -> [I.Type] -> LLVM ()
+declareProc :: I.ID -> [I.Type] -> LLVM ()
 declareProc label argtys = addSym symt Type.void label
   where
     symt = SymbolProcedure argtys
 
 -- | Adds global function definition
-defineSub :: Maybe I.Type -> Located I.ID -> [(I.Type, Located I.ID)] -> [BasicBlock] -> LLVM ()
-defineSub retty label argtys body = addDefn def
+defineSub :: I.ID -> Maybe I.Type -> [(I.Type, Located I.ID)] -> [BasicBlock] -> LLVM ()
+defineSub label retty argtys body = addDefn def
   where
     t = maybe Type.void typeToLLVM retty
     def = GlobalDefinition $
-            functionDefaults { name = (mkName . getID . unLoc) label
+            functionDefaults { name = (mkName . getID) label
                              , parameters = ([Parameter (typeToLLVM ty) ((mkName . getID . unLoc)  nm) []
                                                      | (ty, nm) <- argtys], False)
                              , returnType = t
@@ -335,10 +363,10 @@ defineSub retty label argtys body = addDefn def
 -- | Add global variable definition
 --
 -- Also adds this variable to symbol table
-defineVar :: I.Type -> Located I.ID -> LLVM ()
+defineVar :: I.Type -> I.ID -> LLVM ()
 defineVar ty label = addSym (SymbolVariable ty) t label >> addDefn def
   where
-    n = mkName $ getID $ unLoc label
+    n = mkName $ getID label
     t = typeToLLVM ty
     def = GlobalDefinition $ globalVariableDefaults { name = n, type' = t }
 
@@ -352,7 +380,7 @@ exit = do
         Just bname -> do
             t <- gets subReturn
             return (bname, t)
-        Nothing -> throwError $ InternalError "Exit block was not set."
+        Nothing -> throwLocatedError $ InternalError "Exit block was not set."
 
 addBlock :: String -> Codegen Name
 addBlock bname = do
@@ -387,7 +415,7 @@ current = do
     blks <- gets blocks
     case Map.lookup c blks of
         Just x -> return x
-        Nothing -> throwError $ InternalError $ printf "No such block: '%s'" (show c)
+        Nothing -> throwLocatedError $ InternalError $ printf "No such block: '%s'" (show c)
 
 fresh :: Codegen Word
 fresh = do
@@ -404,21 +432,21 @@ uniqueName nm ns =
 local :: Type -> Name -> Operand
 local = LocalReference
 
-assign :: SymbolType -> Located I.ID -> Operand -> Codegen ()
-assign ty var x = do
+defineLocalVar :: I.ID -> I.Type -> Operand -> Codegen ()
+defineLocalVar name ty x = do
     syms <- gets symtab
-    case Tab.insert (unLoc var) (ty, x) syms of
+    case Tab.insert name (SymbolVariable ty, x) syms of
         Left _ ->
-            throwError $ LocalRedefinition $ unLoc var
+            throwLocatedError $ LocalRedefinition name
         Right syms' ->
             modify $ \s -> s { symtab = syms' }
 
-getvar :: I.ID -> Codegen (SymbolType, Operand)
-getvar var = do
+getVar :: I.ID -> Codegen (SymbolType, Operand)
+getVar var = do
     syms <- gets symtab
     case Tab.lookup var syms of
         Just x -> return x
-        Nothing -> throwError $ SymbolNotInScope var
+        Nothing -> throwLocatedError $ SymbolNotInScope var
 
 instr :: Type -> Instruction -> Codegen Operand
 instr ty ins = do

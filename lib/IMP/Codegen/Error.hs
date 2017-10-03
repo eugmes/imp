@@ -1,10 +1,18 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module IMP.Codegen.Error
   ( CodegenError(..)
+  , throwLocatedError
+  , locatedErrorPretty
   ) where
 
 import IMP.AST
+import IMP.SourceLoc
 import Text.Megaparsec.Error -- TODO use custom class here
+import Text.Megaparsec.Stream
 import Text.Printf
+import Control.Monad.Except
+import qualified Data.Set as Set
 
 data CodegenError = InternalError String
                   | TypeMismatch Type Type -- ^ Types don't match
@@ -54,3 +62,16 @@ eShow MainHasArguments = "'main' should be a procedure with no arguments."
 
 instance ShowErrorComponent CodegenError where
   showErrorComponent = eShow
+
+throwLocatedError :: (MonadLoc m, MonadError (Located e) m) => e -> m a
+throwLocatedError e = do
+  loc <- currentLoc
+  throwError $ Located loc e
+
+-- TODO remove this hack and create some custom class
+locatedErrorPretty :: (Stream s, ShowErrorComponent a, LineToken (Token s), ShowToken (Token s)) => s -> Located a -> String
+locatedErrorPretty s e = parseErrorPretty' s err
+ where
+  posStack = pure $ getLoc e
+  customE = ErrorCustom $ unLoc e
+  err = FancyError posStack $ Set.singleton customE

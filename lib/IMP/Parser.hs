@@ -121,14 +121,14 @@ program = Program <$> varDecs <*> subroutines
 varDec :: Parser VarDec
 varDec = VarDec <$> (rword "var" *> (identifier `sepBy` comma) <* colon) <*> typeName
 
-varDecs :: Parser [VarDec]
-varDecs = varDec `endBy` semicolon
+varDecs :: Parser [Located VarDec]
+varDecs = located varDec `endBy` semicolon
 
 subroutine :: Parser Subroutine
 subroutine = procedure <|> function
 
-subroutines :: Parser [Subroutine]
-subroutines = subroutine `endBy` semicolon
+subroutines :: Parser [Located Subroutine]
+subroutines = located subroutine `endBy` semicolon
 
 checkSubName :: Located ID -> Parser ()
 checkSubName name = do
@@ -161,18 +161,18 @@ function = do
     checkSubName name
     return $ Function name params returnType vars body
 
-procBody :: Parser [Statement]
+procBody :: Parser [Located Statement]
 procBody = between (rword "begin") (rword "end") statements
 
 paramList :: Parser ParamList
 paramList = ParamList <$> (identifier `sepBy1` comma) <* colon <*> typeName
 
-paramLists :: Parser [ParamList]
-paramLists = paramList `sepBy` semicolon
+paramLists :: Parser [Located ParamList]
+paramLists = located paramList `sepBy` semicolon
 
 statement :: Parser Statement
-statement = IfStatement <$> (rword "if" *> expression <* rword "then") <*> statements <*> elsePart <* rword "end" <* rword "if"
-        <|> WhileStatement <$> (rword "while" *> expression <* rword "loop") <*> statements <* rword "end" <* rword "loop"
+statement = IfStatement <$> (rword "if" *> located expression <* rword "then") <*> statements <*> elsePart <* rword "end" <* rword "if"
+        <|> WhileStatement <$> (rword "while" *> located expression <* rword "loop") <*> statements <* rword "end" <* rword "loop"
         <|> CallStatement <$> (rword "call" *> identifier) <*> parens expressions
         <|> InputStatement <$> (rword "input" *> parens identifier)
         <|> OutputStatement <$> (rword "output" *> parens expressionOrString)
@@ -181,39 +181,39 @@ statement = IfStatement <$> (rword "if" *> expression <* rword "then") <*> state
         <|> returnStatement
         <|> HaltStatement <$ rword "halt"
         <|> NewlineStatement <$ rword "newline"
-        <|> AssignStatement <$> identifier <* equals <*> expression
+        <|> AssignStatement <$> identifier <* equals <*> located expression
 
-elsePart :: Parser [Statement]
+elsePart :: Parser [Located Statement]
 elsePart = rword "else" *> statements
        <|> pure []
 
 returnStatement :: Parser Statement
-returnStatement = rword "return" *> (ReturnValStatement <$> expression <|> pure ReturnStatement)
+returnStatement = rword "return" *> (ReturnValStatement <$> located expression <|> pure ReturnStatement)
 
-statements :: Parser [Statement]
-statements = statement `endBy` semicolon
+statements :: Parser [Located Statement]
+statements = located statement `endBy` semicolon
 
 expressionOrString :: Parser ExpressionOrString
 expressionOrString = Str <$> stringLiteral
-                 <|> Exp <$> expression
+                 <|> Exp <$> located expression
 
 expression :: Parser Expression
-expression = try (BinOpExp <$> simpleExpression <*> relOp <*> simpleExpression)
+expression = try (BinOpExp <$> located simpleExpression <*> relOp <*> located simpleExpression)
          <|> simpleExpression
 
-expressions :: Parser [Expression]
-expressions = expression `sepBy` comma
+expressions :: Parser [Located Expression]
+expressions = located expression `sepBy` comma
 
 simpleExpression :: Parser Expression
-simpleExpression = try (BinOpExp <$> term <*> addOp <*> term)
+simpleExpression = try (BinOpExp <$> located term <*> addOp <*> located term)
                <|> term
 
 term :: Parser Expression
-term = try (BinOpExp <$> factor <*> mulOp <*> factor)
+term = try (BinOpExp <$> located factor <*> mulOp <*> located factor)
    <|> factor
 
 factor :: Parser Expression
-factor = UnOpExp <$> unaryOp <*> factor
+factor = UnOpExp <$> unaryOp <*> located factor
      <|> NumberExpression <$> number
      <|> BoolExpression <$> bool
      <|> parens expression
