@@ -76,7 +76,6 @@ data SymbolType = SymbolVariable I.Type
                 deriving Show
 
 data StandardCall = CallInputInteger
-                  | CallInputBoolean
                   | CallOutputInteger
                   | CallOutputBoolean
                   | CallOutputString
@@ -87,7 +86,6 @@ data StandardCall = CallInputInteger
 
 stdCallName :: StandardCall -> Name
 stdCallName CallInputInteger = "_IMP_input_integer"
-stdCallName CallInputBoolean = "_IMP_input_boolean"
 stdCallName CallOutputInteger = "_IMP_output_integer"
 stdCallName CallOutputBoolean = "_IMP_output_boolean"
 stdCallName CallOutputString = "_IMP_output_string"
@@ -97,7 +95,6 @@ stdCallName CallDivideByZeroEx = "_IMP_divide_by_zero_ex"
 
 stdCallType :: StandardCall -> Type
 stdCallType CallInputInteger = integer
-stdCallType CallInputBoolean = integer
 stdCallType _ = Type.void
 
 stdCallArgs :: StandardCall -> [Type]

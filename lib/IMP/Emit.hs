@@ -178,8 +178,8 @@ codegenStatement (I.InputStatement name) = do
     case ty of
         SymbolVariable t -> do
             op <- case t of
-                I.BooleanType -> apiCall CallInputBoolean []
                 I.IntegerType -> apiCall CallInputInteger []
+                _ -> error "Attempt to input something other than integer"
             store (typeToLLVM t) ptr op
         _ -> error "Attempt to input a subroutine"
 
