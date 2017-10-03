@@ -52,7 +52,7 @@ import IMP.AST (getID)
 import qualified IMP.SymbolTable as Tab
 import IMP.SourceLoc
 import qualified LLVM.AST as AST
-import LLVM.AST hiding (type')
+import LLVM.AST hiding (type', functionAttributes)
 import LLVM.AST.Type hiding (void)
 import qualified LLVM.AST.Type as Type
 import LLVM.AST.Global
@@ -63,6 +63,7 @@ import LLVM.AST.Linkage
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import LLVM.AST.AddrSpace
+import qualified LLVM.AST.FunctionAttribute as FA
 import Control.Monad.State
 import Data.String
 import Data.List
@@ -102,6 +103,11 @@ stdCallArgs CallOutputInteger = [integer]
 stdCallArgs CallOutputBoolean = [boolean]
 stdCallArgs CallOutputString = [stringType]
 stdCallArgs _ = []
+
+stdCallAttrs :: StandardCall -> [FA.FunctionAttribute]
+stdCallAttrs CallHalt = [FA.NoReturn]
+stdCallAttrs CallDivideByZeroEx = [FA.NoReturn]
+stdCallAttrs _ = []
 
 type SymbolTableEntry = (SymbolType, Operand)
 
@@ -478,20 +484,23 @@ emitStdCall c = addDefn d
     retty = stdCallType c
     n = stdCallName c
     args = stdCallArgs c
+    attrs = Right <$> stdCallAttrs c
     d = GlobalDefinition $
         functionDefaults { name = n
                          , parameters = ([Parameter ty "" [] | ty <- args], False)
                          , returnType = retty
+                         , functionAttributes = attrs
                          }
 
 apiCall :: StandardCall -> [Operand] -> Codegen Operand
 apiCall c args = do
     used <- gets apis
     modify $ \s -> s { apis = Set.insert c used }
-    call (stdCallType c) fun args
+    instr ty $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) attrs []
   where
     ty = stdCallType c
     fun = ConstantOperand $ GlobalReference ty $ stdCallName c
+    attrs = Right <$> stdCallAttrs c
 
 finalizeLLVM :: LLVM ()
 finalizeLLVM = emitStrings >> emitStdCalls
