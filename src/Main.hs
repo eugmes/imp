@@ -43,8 +43,7 @@ options = Options
   <*> optional (option auto (short 'O' <> metavar "LEVEL" <> help "Set optimization level"))
 
 genCode :: Options -> FilePath -> Program -> IO ()
-genCode o name pgm = do
-  initializeNativeTarget
+genCode o name pgm =
   withContext $ \context ->
     withHostTargetMachine $ \target -> do
       dataLayout <- getTargetMachineDataLayout target
