@@ -62,6 +62,8 @@ import LLVM.AST.Linkage
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import LLVM.AST.AddrSpace
+import LLVM.AST.DataLayout
+import LLVM.Prelude (ShortByteString)
 import qualified LLVM.AST.FunctionAttribute as FA
 import Control.Monad.State
 import Data.String
@@ -245,9 +247,13 @@ newLLVMState m = LLVMState m Tab.empty 0 Map.empty Set.empty
 runLLVM :: AST.Module -> LLVM a -> AST.Module
 runLLVM md (LLVM m) = currentModule $ execState m (newLLVMState md)
 
-emptyModule :: String -> FilePath -> AST.Module
-emptyModule label sourceFile = defaultModule { moduleName = fromString label
-                                             , moduleSourceFileName = fromString sourceFile }
+emptyModule :: String -> FilePath -> DataLayout -> ShortByteString -> AST.Module
+emptyModule label sourceFile dataLayout targetTriple = defaultModule
+                                             { moduleName = fromString label
+                                             , moduleSourceFileName = fromString sourceFile
+                                             , moduleDataLayout = Just dataLayout
+                                             , moduleTargetTriple = Just targetTriple
+                                             }
 
 integer, boolean, stringType, integerAndBoolean :: Type
 integer = i32
