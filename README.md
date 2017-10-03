@@ -37,5 +37,3 @@ native assembler code or to produce an executable. An example using
 % ./hello
 Hello World!
 ```
-
-NOTE: the standard library is currently incomplete.
