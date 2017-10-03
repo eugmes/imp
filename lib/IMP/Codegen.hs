@@ -7,7 +7,7 @@ module IMP.Codegen
     , Codegen
     , SymbolType (..)
     , loopExitBlock
-    , runLLVM
+    , execLLVM
     , emptyModule -- TODO unexport this
     , finalizeLLVM
     , defineVar
@@ -51,6 +51,7 @@ import qualified IMP.AST as I
 import IMP.AST (getID)
 import qualified IMP.SymbolTable as Tab
 import IMP.SourceLoc
+import IMP.Codegen.Error
 import qualified LLVM.AST as AST
 import LLVM.AST hiding (type', functionAttributes, metadata)
 import LLVM.AST.Type hiding (void)
@@ -67,12 +68,14 @@ import LLVM.AST.DataLayout
 import LLVM.Prelude (ShortByteString)
 import qualified LLVM.AST.FunctionAttribute as FA
 import Control.Monad.State
+import Control.Monad.Except
 import Data.String
 import Data.List
 import Data.Function
 import Data.Version
 import qualified Data.ByteString.UTF8 as U8
 import qualified Data.ByteString as B
+import Text.Printf
 
 data SymbolType = SymbolVariable I.Type
                 | SymbolProcedure [I.Type]
@@ -174,20 +177,25 @@ emptyBlock :: Int -> BlockState
 emptyBlock ix = BlockState ix [] Nothing
 
 newtype Codegen a = Codegen
-                  { runCodegen :: State CodegenState a
-                  } deriving (Functor, Applicative, Monad, MonadState CodegenState)
+                  { runCodegen :: StateT CodegenState (Except CodegenError) a
+                  } deriving ( Functor
+                             , Applicative
+                             , Monad
+                             , MonadError CodegenError
+                             , MonadState CodegenState
+                             )
 
 sortBlocks :: [(Name, BlockState)] -> [(Name, BlockState)]
 sortBlocks = sortBy (compare `on` (idx . snd))
 
-createBlocks :: CodegenState -> [BasicBlock]
-createBlocks = map makeBlock . sortBlocks . Map.toList . blocks
+createBlocks :: CodegenState -> LLVM [BasicBlock]
+createBlocks = traverse makeBlock . sortBlocks . Map.toList . blocks
 
-makeBlock :: (Name, BlockState) -> BasicBlock
-makeBlock (l, BlockState _ s t) = BasicBlock l (reverse s) (makeTerm t)
-  where
-    makeTerm (Just x) = x
-    makeTerm Nothing = error $ "Block has no terminator: "  ++ show l
+makeBlock :: (Name, BlockState) -> LLVM BasicBlock
+makeBlock (l, BlockState _ s t) =
+  case t of
+    Just term -> return $ BasicBlock l (reverse s) term
+    Nothing -> throwError $ InternalError $ printf "Block has no terminator: '%s'."  (show l)
 
 entryBlockName, exitBlockName :: String
 entryBlockName = "entry"
@@ -217,12 +225,16 @@ newCodegen = do
 
 execCodegen :: Codegen a -> LLVM [BasicBlock]
 execCodegen m = do
-    cgen <- execState (runCodegen m) <$> newCodegen
-    modify $ \s -> s { globalStringsCount = stringCount cgen
-                     , globalStrings = strings cgen
-                     , globalUsedCalls = apis cgen
-                     }
-    return $ createBlocks cgen
+    cg <- newCodegen
+    let res = runExcept $ execStateT (runCodegen m) cg
+    case res of
+      Left err -> throwError err
+      Right cgen -> do
+        modify $ \s -> s { globalStringsCount = stringCount cgen
+                         , globalStrings = strings cgen
+                         , globalUsedCalls = apis cgen
+                         }
+        createBlocks cgen
 
 withLoopExit :: Name -> Codegen a -> Codegen a
 withLoopExit newExitB m = do
@@ -241,14 +253,14 @@ data LLVMState = LLVMState
                , globalMetadataCount :: Word
                } deriving Show
 
-newtype LLVM a = LLVM (State LLVMState a)
-    deriving (Functor, Applicative, Monad, MonadState LLVMState)
+newtype LLVM a = LLVM { runLLVM :: StateT LLVMState (Except CodegenError) a }
+    deriving (Functor, Applicative, Monad, MonadState LLVMState, MonadError CodegenError)
 
 newLLVMState :: AST.Module -> LLVMState
 newLLVMState m = LLVMState m Tab.empty 0 Map.empty Set.empty 0
 
-runLLVM :: AST.Module -> LLVM a -> AST.Module
-runLLVM md (LLVM m) = currentModule $ execState m (newLLVMState md)
+execLLVM :: AST.Module -> LLVM a -> Either CodegenError AST.Module
+execLLVM md m = fmap currentModule $ runExcept $ execStateT (runLLVM m) (newLLVMState md)
 
 emptyModule :: String -> FilePath -> DataLayout -> ShortByteString -> AST.Module
 emptyModule label sourceFile dataLayout targetTriple = defaultModule
@@ -283,7 +295,7 @@ addSym st lt n = do
     syms <- gets globalSymtab
     let sym = (st, ConstantOperand $ GlobalReference lt (mkName $ getID $ unLoc n))
     case Tab.insert (unLoc n) sym syms of
-        Left _ -> error $ "Attempt to redefine global symbol " ++ getID (unLoc n)
+        Left _ -> throwError $ GlobalRedefinition (unLoc n)
         Right syms' -> modify $ \s -> s { globalSymtab = syms' }
 
 -- | Add global definition
@@ -340,7 +352,7 @@ exit = do
         Just bname -> do
             t <- gets subReturn
             return (bname, t)
-        Nothing -> error "Exit block was not set"
+        Nothing -> throwError $ InternalError "Exit block was not set."
 
 addBlock :: String -> Codegen Name
 addBlock bname = do
@@ -375,7 +387,7 @@ current = do
     blks <- gets blocks
     case Map.lookup c blks of
         Just x -> return x
-        Nothing -> error $ "No such block: " ++ show c
+        Nothing -> throwError $ InternalError $ printf "No such block: '%s'" (show c)
 
 fresh :: Codegen Word
 fresh = do
@@ -397,7 +409,7 @@ assign ty var x = do
     syms <- gets symtab
     case Tab.insert (unLoc var) (ty, x) syms of
         Left _ ->
-            error $ "Attempt to override local definition: " ++ show var
+            throwError $ LocalRedefinition $ unLoc var
         Right syms' ->
             modify $ \s -> s { symtab = syms' }
 
@@ -406,7 +418,7 @@ getvar var = do
     syms <- gets symtab
     case Tab.lookup var syms of
         Just x -> return x
-        Nothing -> error $ "Local variable not in scope: " ++ show var
+        Nothing -> throwError $ SymbolNotInScope var
 
 instr :: Type -> Instruction -> Codegen Operand
 instr ty ins = do

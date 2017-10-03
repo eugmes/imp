@@ -25,6 +25,7 @@ library
                      , IMP.Parser
                      , IMP.Parser.Error
                      , IMP.Codegen
+                     , IMP.Codegen.Error
                      , IMP.Emit
                      , IMP.SymbolTable
                      , IMP.SourceLoc

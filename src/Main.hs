@@ -49,13 +49,17 @@ genCode o name pgm =
       dataLayout <- getTargetMachineDataLayout target
       targetTriple <- getTargetMachineTriple target
       let mod = emptyModule name name dataLayout targetTriple
-          ast = runLLVM mod $ codegenProgram pgm
-      withModuleFromAST context ast $ \m -> do
-        verify m
-        withPassManager passes $ \pm -> do
-          void $ runPassManager pm m
-          llstr <- moduleLLVMAssembly m
-          outputAssembly llstr
+      case execLLVM mod $ codegenProgram pgm of
+        Left err -> do
+          putStrLn $ "error: " ++ P.showErrorComponent err
+          exitFailure
+        Right ast ->
+          withModuleFromAST context ast $ \m -> do
+            verify m
+            withPassManager passes $ \pm -> do
+              void $ runPassManager pm m
+              llstr <- moduleLLVMAssembly m
+              outputAssembly llstr
  where
   outputAssembly = maybe C.putStr C.writeFile $ outputFile o
   passes = defaultCuratedPassSetSpec { optLevel = optimizationLevel o }

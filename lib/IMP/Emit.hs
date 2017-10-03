@@ -5,6 +5,7 @@ module IMP.Emit (codegenProgram) where
 import qualified IMP.AST as I
 import IMP.AST (getID)
 import IMP.Codegen
+import IMP.Codegen.Error
 import IMP.SourceLoc
 import qualified LLVM.AST as AST
 import LLVM.AST hiding (type')
@@ -12,6 +13,7 @@ import qualified LLVM.AST.Type as Type
 import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.IntegerPredicate as IP
 import Control.Monad.State
+import Control.Monad.Except
 
 codegenProgram :: I.Program -> LLVM ()
 codegenProgram (I.Program vars subs) = do
@@ -71,11 +73,11 @@ codegenSub' name retty params vars body = do
 codegenSub :: I.Subroutine -> LLVM ()
 codegenSub (I.Procedure name params vars body) = do
     when ((unLoc name == I.ID "main") && not (null params)) $
-        error "main should be a procedure with no arguments"
+        throwError MainHasArguments
     codegenSub' name Nothing params vars body
 
 codegenSub (I.Function name params retty vars body) = do
-    when (unLoc name == I.ID "main") $ error "main should be a procedure"
+    when (unLoc name == I.ID "main") $ throwError MainIsAFunction
     codegenSub' name (Just $ unLoc retty) params vars body
 
 codegenLocals :: [I.VarDec] -> Codegen ()
@@ -91,8 +93,7 @@ codegenLocal ty name = do
 
 typeCheck :: I.Type -> I.Type -> Codegen ()
 typeCheck lt rt =
-    when (lt /= rt) $
-        error $ "Types don't match: " ++ show (lt, rt)
+    when (lt /= rt) $ throwError $ TypeMismatch lt rt
 
 maybeGenBlock :: String -> Name -> [I.Statement] -> Codegen Name
 maybeGenBlock _ contName [] = return contName
@@ -121,7 +122,7 @@ gotoBlock bname = do
 codegenSubCall :: Operand -> Type -> [I.Type] -> [I.Expression] -> Codegen Operand
 codegenSubCall name rty args exps = do
     when (length args /= length exps) $
-        error "Invalid number of arguments"
+        throwError InvalidNumberOfArguments
     vals <- mapM codegenExpression exps
     forM_ (zip args (map fst vals)) $ uncurry typeCheck
     call rty name (map snd vals)
@@ -139,7 +140,7 @@ codegenStatement (I.IfStatement cond ifTrue ifFalse) = do
             cbr op ifTrueB ifFalseB
 
             setBlock ifExitB
-        _ -> error "Boolean expression expected as if statement codition"
+        _ -> throwError NonBooleanIfCondition
 
 codegenStatement (I.WhileStatement cond body) = do
     whileCondB <- addBlock "while.cond"
@@ -155,13 +156,13 @@ codegenStatement (I.WhileStatement cond body) = do
             cbr op whileLoopB whileExitB
 
             setBlock whileExitB
-        _ -> error "Boolean expression expected as while statement condition"
+        _ -> throwError NonBooleanWhileCondition
 
 codegenStatement (I.AssignStatement name exp) = do
     (varSymType, varPtr) <- getvar $ unLoc name
     varType <- case varSymType of
         SymbolVariable ty -> return ty
-        _ -> error $ show name ++ " is not a variable"
+        _ -> throwError $ NotAVariable $ unLoc name
     (expType, op) <- codegenExpression exp
     typeCheck varType expType
     store (typeToLLVM varType) varPtr op
@@ -169,8 +170,8 @@ codegenStatement (I.AssignStatement name exp) = do
 codegenStatement (I.CallStatement name exps) = do
     (ty, proc) <- getvar $ unLoc name
     case ty of
-        SymbolVariable _ -> error "Attempt to call a variable"
-        SymbolFunction _ _ -> error "Attempt to call a function as procedure"
+        SymbolVariable _ -> throwError AttemptToCallAVariable
+        SymbolFunction _ _ -> throwError AttemptToCallAFunctionAsProcedure
         SymbolProcedure args -> void $ codegenSubCall proc Type.void args exps
 
 codegenStatement (I.InputStatement name) = do
@@ -179,9 +180,9 @@ codegenStatement (I.InputStatement name) = do
         SymbolVariable t -> do
             op <- case t of
                 I.IntegerType -> apiCall CallInputInteger []
-                _ -> error "Attempt to input something other than integer"
+                _ -> throwError InputError
             store (typeToLLVM t) ptr op
-        _ -> error "Attempt to input a subroutine"
+        _ -> throwError InputError
 
 codegenStatement (I.OutputStatement (I.Exp exp)) = do
     (ty, op) <- codegenExpression exp
@@ -199,13 +200,13 @@ codegenStatement I.NullStatement = return ()
 codegenStatement I.BreakStatement = do
     loopEx <- gets loopExitBlock
     case loopEx of
-        Nothing -> error "break can only be used inside a loop"
+        Nothing -> throwError BreakOutsideOfLoop
         Just bname -> gotoBlock bname
 
 codegenStatement I.ReturnStatement = do
     ex <- exit
     case ex of
-        (_, Just _) -> error "Function must return a value"
+        (_, Just _) -> throwError VoidReturnInFunction
         (bname, Nothing) -> gotoBlock bname
 
 codegenStatement (I.ReturnValStatement exp) = do
@@ -216,7 +217,7 @@ codegenStatement (I.ReturnValStatement exp) = do
             typeCheck retty ty
             store (typeToLLVM retty) ptr op
             gotoBlock bname
-        (_, Nothing) -> error "Procedure cannot return a value"
+        (_, Nothing) -> throwError NonVoidReturnInProcedure
 
 codegenStatement I.HaltStatement = void $ apiCall CallHalt []
 codegenStatement I.NewlineStatement = void $ apiCall CallNewline []
@@ -230,7 +231,7 @@ codegenExpression (I.UnOpExp unaryOp expr) = do
             return (ty, op)
         (I.OpNeg, I.IntegerType) ->
             genArithCall ty CallSSubWithOverflow (constZero $ typeToLLVM ty) fOp
-        _ -> error $ "Invalid type for unary operator: " ++ show (unaryOp, ty)
+        _ -> throwError $ UnaryOpTypeMismatch unaryOp ty
 
 codegenExpression (I.BinOpExp leftExp binaryOp rightExp) = do
     (leftType, leftOp) <- codegenExpression leftExp
@@ -251,7 +252,7 @@ codegenExpression (I.BinOpExp leftExp binaryOp rightExp) = do
                (I.OpDiv, I.IntegerType) -> genDivOp leftType sdiv
                (I.OpMod, I.IntegerType) -> genDivOp leftType srem
                (I.OpAnd, I.BooleanType) -> and
-               p -> error $ "Invalid type for binary operation: " ++ show p
+               _ -> \_ _ -> throwError $ BinaryOpTypeMismatch binaryOp leftType
 
     fn leftOp rightOp
   where
@@ -281,13 +282,13 @@ codegenExpression (I.IdExpression name) = do
         SymbolVariable t -> do
             op <- load (typeToLLVM t) ptr
             return (t, op)
-        _ -> error "Attempt to read value of a subroutine"
+        _ -> throwError AttemptToReadSubroutine
 
 codegenExpression (I.CallExpression name exps) = do
     (ty, fun) <- getvar $ unLoc name
     case ty of
-        SymbolVariable _ -> error "Attempt to call a variable"
-        SymbolProcedure _ -> error "Attempt to call a procedure as function"
+        SymbolVariable _ -> throwError AttemptToCallAVariable
+        SymbolProcedure _ -> throwError AttemptToCallAProcedureAsFunction
         SymbolFunction rtype args -> do
             op <- codegenSubCall fun (typeToLLVM rtype) args exps
             return (rtype, op)

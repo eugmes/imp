@@ -8,7 +8,7 @@ data VarDec = VarDec [Located ID] (Located Type) deriving Show
 
 newtype ID = ID {getID :: String} deriving (Show, Eq, Ord)
 
-data Type = IntegerType | BooleanType deriving (Show, Eq)
+data Type = IntegerType | BooleanType deriving (Show, Eq, Ord)
 
 newtype Number = Number Integer deriving Show
 
@@ -43,8 +43,8 @@ data Expression = UnOpExp UnaryOp Expression
                 | CallExpression (Located ID) [Expression]
                 deriving Show
 
-data UnaryOp = OpNot | OpNeg deriving (Show, Eq)
+data UnaryOp = OpNot | OpNeg deriving (Show, Eq, Ord)
 
 data BinaryOp = OpEQ | OpLT | OpLE | OpGT | OpGE | OpNE
               | OpMul | OpDiv | OpMod | OpAnd
-              | OpAdd | OpSub | OpOr deriving (Show, Eq)
+              | OpAdd | OpSub | OpOr deriving (Show, Eq, Ord)
