@@ -46,12 +46,13 @@ module IMP.Codegen
     , boolean
     ) where
 
+import Paths_imp
 import qualified IMP.AST as I
 import IMP.AST (getID)
 import qualified IMP.SymbolTable as Tab
 import IMP.SourceLoc
 import qualified LLVM.AST as AST
-import LLVM.AST hiding (type', functionAttributes)
+import LLVM.AST hiding (type', functionAttributes, metadata)
 import LLVM.AST.Type hiding (void)
 import qualified LLVM.AST.Type as Type
 import LLVM.AST.Global
@@ -69,6 +70,7 @@ import Control.Monad.State
 import Data.String
 import Data.List
 import Data.Function
+import Data.Version
 import qualified Data.ByteString.UTF8 as U8
 import qualified Data.ByteString as B
 
@@ -236,13 +238,14 @@ data LLVMState = LLVMState
                , globalStringsCount :: Word
                , globalStrings :: Map.Map Name U8.ByteString
                , globalUsedCalls :: Set.Set StandardCall
+               , globalMetadataCount :: Word
                } deriving Show
 
 newtype LLVM a = LLVM (State LLVMState a)
     deriving (Functor, Applicative, Monad, MonadState LLVMState)
 
 newLLVMState :: AST.Module -> LLVMState
-newLLVMState m = LLVMState m Tab.empty 0 Map.empty Set.empty
+newLLVMState m = LLVMState m Tab.empty 0 Map.empty Set.empty 0
 
 runLLVM :: AST.Module -> LLVM a -> AST.Module
 runLLVM md (LLVM m) = currentModule $ execState m (newLLVMState md)
@@ -521,5 +524,28 @@ apiCall c args = do
     fun = ConstantOperand $ GlobalReference ty $ stdCallName c
     attrs = Right <$> stdCallAttrs c
 
+namedMetadata :: ShortByteString -> [MetadataNodeID] -> LLVM ()
+namedMetadata name ids = addDefn $ NamedMetadataDefinition name ids
+
+newMetadataNodeID :: LLVM MetadataNodeID
+newMetadataNodeID = do
+  metadataCount <- gets globalMetadataCount
+  modify $ \s -> s { globalMetadataCount = metadataCount + 1 }
+  return $ MetadataNodeID metadataCount
+
+metadata :: [Maybe Metadata] -> LLVM MetadataNodeID
+metadata defs = do
+  nd <- newMetadataNodeID
+  addDefn $ MetadataNodeDefinition nd defs
+  return nd
+
+emitCompilerInfo :: LLVM ()
+emitCompilerInfo = do
+  nd <- metadata [Just $ MDString $ fromString $ "IMP version " ++ showVersion version]
+  namedMetadata "llvm.ident" [nd]
+
 finalizeLLVM :: LLVM ()
-finalizeLLVM = emitStrings >> emitStdCalls
+finalizeLLVM = do
+  emitStrings
+  emitStdCalls
+  emitCompilerInfo
