@@ -29,6 +29,7 @@ module IMP.Codegen
     , br
     , cbr
     , ret
+    , unreachable
     , entry
     , call
     , withLoopExit
@@ -42,6 +43,8 @@ module IMP.Codegen
     , integer
     , constTrue
     , constFalse
+    , constZero
+    , boolean
     ) where
 
 import qualified IMP.AST as I
@@ -79,6 +82,7 @@ data StandardCall = CallInputInteger
                   | CallOutputString
                   | CallHalt
                   | CallNewline
+                  | CallDivideByZeroEx
                   deriving (Show, Ord, Bounded, Eq)
 
 stdCallName :: StandardCall -> Name
@@ -89,6 +93,7 @@ stdCallName CallOutputBoolean = "_IMP_output_boolean"
 stdCallName CallOutputString = "_IMP_output_string"
 stdCallName CallHalt = "_IMP_halt"
 stdCallName CallNewline = "_IMP_newline"
+stdCallName CallDivideByZeroEx = "_IMP_divide_by_zero_ex"
 
 stdCallType :: StandardCall -> Type
 stdCallType CallInputInteger = integer
@@ -426,6 +431,9 @@ cbr cond tr fl = terminator $ Do $ CondBr cond tr fl []
 
 ret :: Maybe Operand -> Codegen ()
 ret val = terminator $ Do $ Ret val []
+
+unreachable :: Codegen ()
+unreachable = terminator $ Do $ Unreachable []
 
 newString :: String -> Codegen Operand
 newString s = do

@@ -248,8 +248,8 @@ codegenExpression (I.BinOpExp leftExp binaryOp rightExp) = do
                (I.OpSub, I.IntegerType) -> sub
                (I.OpOr, I.BooleanType) -> or
                (I.OpMul, I.IntegerType) -> mul
-               (I.OpDiv, I.IntegerType) -> sdiv
-               (I.OpMod, I.IntegerType) -> srem
+               (I.OpDiv, I.IntegerType) -> genDivOp leftType sdiv
+               (I.OpMod, I.IntegerType) -> genDivOp leftType srem
                (I.OpAnd, I.BooleanType) -> and
                p -> error $ "Invalid type for binary operation: " ++ show p
 
@@ -294,3 +294,22 @@ codegenExpression (I.CallExpression name exps) = do
         SymbolFunction rtype args -> do
             op <- codegenSubCall fun (typeToLLVM rtype) args exps
             return (rtype, op)
+
+-- | Generate a division operation with division by zero check.
+--
+-- TODO Make check optional
+-- TODO Adjust weights of branches
+genDivOp :: I.Type -> (Operand -> Operand -> Codegen (I.Type, Operand))
+            -> Operand -> Operand -> Codegen (I.Type, Operand)
+genDivOp ty fn leftOp rightOp = do
+  condOp <- instr boolean $ AST.ICmp IP.EQ rightOp (constZero $ typeToLLVM ty) []
+  divB <- addBlock "div"
+  exB <- addBlock "div.ex"
+  cbr condOp exB divB
+
+  setBlock exB
+  void $ apiCall CallDivideByZeroEx []
+  unreachable
+
+  setBlock divB
+  fn leftOp rightOp
