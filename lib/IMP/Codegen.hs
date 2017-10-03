@@ -486,6 +486,7 @@ emitString (n, content) = addDefn d
     d = GlobalDefinition $
         globalVariableDefaults { name = n
                                , linkage = Private
+                               , unnamedAddr = Just GlobalAddr
                                , isConstant = True
                                , type' = ArrayType { nArrayElements = size
                                                    , elementType = i8 }
