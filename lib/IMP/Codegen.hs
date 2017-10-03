@@ -38,7 +38,6 @@ module IMP.Codegen
     , newString
     , exit
     , notInstr
-    , negateInstr
     , instr
     , integer
     , constTrue
@@ -82,7 +81,11 @@ data StandardCall = CallInputInteger
                   | CallOutputString
                   | CallHalt
                   | CallNewline
+                  | CallSAddWithOverflow
+                  | CallSSubWithOverflow
+                  | CallSMulWithOverflow
                   | CallDivideByZeroEx
+                  | CallIntegerOverflowEx
                   deriving (Show, Ord, Bounded, Eq)
 
 stdCallName :: StandardCall -> Name
@@ -92,21 +95,33 @@ stdCallName CallOutputBoolean = "_IMP_output_boolean"
 stdCallName CallOutputString = "_IMP_output_string"
 stdCallName CallHalt = "_IMP_halt"
 stdCallName CallNewline = "_IMP_newline"
+-- NOTE this call names will need to change if integer size is changed
+stdCallName CallSAddWithOverflow = "llvm.sadd.with.overflow.i32"
+stdCallName CallSSubWithOverflow = "llvm.ssub.with.overflow.i32"
+stdCallName CallSMulWithOverflow = "llvm.smul.with.overflow.i32"
 stdCallName CallDivideByZeroEx = "_IMP_divide_by_zero_ex"
+stdCallName CallIntegerOverflowEx = "_IMP_integer_overflow_ex"
 
 stdCallType :: StandardCall -> Type
 stdCallType CallInputInteger = integer
+stdCallType CallSAddWithOverflow = integerAndBoolean
+stdCallType CallSSubWithOverflow = integerAndBoolean
+stdCallType CallSMulWithOverflow = integerAndBoolean
 stdCallType _ = Type.void
 
 stdCallArgs :: StandardCall -> [Type]
 stdCallArgs CallOutputInteger = [integer]
 stdCallArgs CallOutputBoolean = [boolean]
 stdCallArgs CallOutputString = [stringType]
+stdCallArgs CallSAddWithOverflow = [integer, integer]
+stdCallArgs CallSSubWithOverflow = [integer, integer]
+stdCallArgs CallSMulWithOverflow = [integer, integer]
 stdCallArgs _ = []
 
 stdCallAttrs :: StandardCall -> [FA.FunctionAttribute]
 stdCallAttrs CallHalt = [FA.NoReturn]
 stdCallAttrs CallDivideByZeroEx = [FA.NoReturn]
+stdCallAttrs CallIntegerOverflowEx = [FA.NoReturn]
 stdCallAttrs _ = []
 
 type SymbolTableEntry = (SymbolType, Operand)
@@ -234,10 +249,11 @@ emptyModule :: String -> FilePath -> AST.Module
 emptyModule label sourceFile = defaultModule { moduleName = fromString label
                                              , moduleSourceFileName = fromString sourceFile }
 
-integer, boolean, stringType :: Type
+integer, boolean, stringType, integerAndBoolean :: Type
 integer = i32
 boolean = i1
 stringType = PointerType i8 $ AddrSpace 0
+integerAndBoolean = StructureType False [integer, boolean]
 
 constFalse, constTrue :: Operand
 constFalse = ConstantOperand $ C.Int 1 0
@@ -404,10 +420,6 @@ alloca n ty = instr' n ty $ Alloca ty Nothing 0 []
 store :: Type -> Operand -> Operand -> Codegen ()
 store ty ptr val =
     void $ instr ty $ Store False ptr val Nothing 0 []
-
-negateInstr :: Type -> Operand -> Codegen Operand
-negateInstr ty op =
-    instr ty $ AST.Sub True False (constZero ty) op []
 
 notInstr :: Operand -> Codegen Operand
 notInstr op =

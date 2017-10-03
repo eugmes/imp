@@ -224,13 +224,13 @@ codegenStatement I.NewlineStatement = void $ apiCall CallNewline []
 codegenExpression :: I.Expression -> Codegen (I.Type, Operand)
 codegenExpression (I.UnOpExp unaryOp expr) = do
     (ty, fOp) <- codegenExpression expr
-    op <- case (unaryOp, ty) of
-        (I.OpNot, I.BooleanType) ->
-            notInstr fOp
+    case (unaryOp, ty) of
+        (I.OpNot, I.BooleanType) -> do
+            op <- notInstr fOp
+            return (ty, op)
         (I.OpNeg, I.IntegerType) ->
-            negateInstr (typeToLLVM ty) fOp
+            genArithCall ty CallSSubWithOverflow (constZero $ typeToLLVM ty) fOp
         _ -> error $ "Invalid type for unary operator: " ++ show (unaryOp, ty)
-    return (ty, op)
 
 codegenExpression (I.BinOpExp leftExp binaryOp rightExp) = do
     (leftType, leftOp) <- codegenExpression leftExp
@@ -244,10 +244,10 @@ codegenExpression (I.BinOpExp leftExp binaryOp rightExp) = do
                (I.OpGT, I.IntegerType) -> icmp IP.SGT
                (I.OpGE, I.IntegerType) -> icmp IP.SLE
                (I.OpNE, _) -> icmp IP.NE
-               (I.OpAdd, I.IntegerType) -> add
-               (I.OpSub, I.IntegerType) -> sub
+               (I.OpAdd, I.IntegerType) -> genArithCall leftType CallSAddWithOverflow
+               (I.OpSub, I.IntegerType) -> genArithCall leftType CallSSubWithOverflow
                (I.OpOr, I.BooleanType) -> or
-               (I.OpMul, I.IntegerType) -> mul
+               (I.OpMul, I.IntegerType) -> genArithCall leftType CallSMulWithOverflow
                (I.OpDiv, I.IntegerType) -> genDivOp leftType sdiv
                (I.OpMod, I.IntegerType) -> genDivOp leftType srem
                (I.OpAnd, I.BooleanType) -> and
@@ -260,10 +260,7 @@ codegenExpression (I.BinOpExp leftExp binaryOp rightExp) = do
         return (ty, op)
 
     icmp pred = wrap I.BooleanType (AST.ICmp pred)
-    add = wrap I.IntegerType $ AST.Add True False
-    sub = wrap I.IntegerType $ AST.Sub True False
     or = wrap I.BooleanType AST.Or
-    mul = wrap I.IntegerType $ AST.Mul True False
     sdiv = wrap I.IntegerType $ AST.SDiv False
     srem = wrap I.IntegerType AST.SRem
     and = wrap I.BooleanType AST.And
@@ -313,3 +310,23 @@ genDivOp ty fn leftOp rightOp = do
 
   setBlock divB
   fn leftOp rightOp
+
+-- | Generate integer arithmetic operations with overflow check.
+--
+-- TODO Make check optional
+-- TODO Adjust weights of branches
+genArithCall :: I.Type -> StandardCall -> Operand -> Operand -> Codegen (I.Type, Operand)
+genArithCall ty c leftOp rightOp = do
+  op <- apiCall c [leftOp, rightOp]
+  obit <- instr boolean $ ExtractValue op [1] []
+  arithB <- addBlock "arith"
+  exB <- addBlock "arith.ex"
+  cbr obit exB arithB
+
+  setBlock exB
+  void $ apiCall CallIntegerOverflowEx []
+  unreachable
+
+  setBlock arithB
+  res <- instr (typeToLLVM ty) $ ExtractValue op [0] []
+  return (ty, res)

@@ -46,3 +46,9 @@ void _IMP_divide_by_zero_ex(void)
     fprintf(stderr, "IMP ERROR: divide by zero\n");
     exit(EXIT_FAILURE);
 }
+
+void _IMP_integer_overflow_ex(void)
+{
+    fprintf(stderr, "IMP ERROR: integer overflow\n");
+    exit(EXIT_FAILURE);
+}
