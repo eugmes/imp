@@ -1,6 +1,6 @@
 function fibi(n : integer) return integer is
 begin
-  if n < 2 then
+  if n <= 2 then
     return 1;
   else
     return fibi(n-2) + fibi(n - 1);

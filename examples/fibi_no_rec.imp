@@ -7,7 +7,7 @@ begin
   c = 0;
   i = 3;
 
-  while i < x loop
+  while i <= x loop
     c = a + b;
     a = b;
     b = c;
