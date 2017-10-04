@@ -65,7 +65,7 @@ codegenSub' name retty params vars body = do
         forM_ args $ \(ty, a) -> do
             let t = typeToLLVM ty
             var <- alloca (getID (unLoc a) ++ ".addr") t
-            store t var $ local t $ mkName $ getID $ unLoc a
+            store var $ local t $ mkName $ getID $ unLoc a
             withLoc (\n -> defineLocalVar n ty var) a
         codegenLocals vars
         mapM_ (withLoc codegenStatement) body
@@ -169,7 +169,7 @@ codegenStatement (I.AssignStatement name exp) = do
         _ -> throwLocatedError $ NotAVariable $ unLoc name
     (expType, op) <- withLoc codegenExpression exp
     typeCheck varType expType
-    store (typeToLLVM varType) varPtr op
+    store varPtr op
 
 codegenStatement (I.CallStatement name exps) = do
     (ty, proc) <- withLoc getVar name
@@ -185,7 +185,7 @@ codegenStatement (I.InputStatement name) = do
             op <- case t of
                 I.IntegerType -> apiCall CallInputInteger []
                 _ -> throwLocatedError InputError
-            store (typeToLLVM t) ptr op
+            store ptr op
         _ -> throwLocatedError InputError
 
 codegenStatement (I.OutputStatement (I.Exp exp)) = do
@@ -219,7 +219,7 @@ codegenStatement (I.ReturnValStatement exp) = do
         (bname, Just (retty, ptr)) -> do
             (ty, op) <- withLoc codegenExpression exp
             typeCheck retty ty
-            store (typeToLLVM retty) ptr op
+            store ptr op
             gotoBlock bname
         (_, Nothing) -> throwLocatedError NonVoidReturnInProcedure
 

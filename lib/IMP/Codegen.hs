@@ -463,12 +463,18 @@ namedInstr ref ty ins = do
     modifyBlock (blk { stack = (ref := ins) : i})
     return $ local ty ref
 
+voidInstr :: Instruction -> Codegen ()
+voidInstr ins = do
+  blk <- current
+  let i = stack blk
+  modifyBlock (blk { stack = Do ins : i})
+
 alloca :: String -> Type -> Codegen Operand
 alloca n ty = instr' n ty $ Alloca ty Nothing 0 []
 
-store :: Type -> Operand -> Operand -> Codegen ()
-store ty ptr val =
-    void $ instr ty $ Store False ptr val Nothing 0 []
+store :: Operand -> Operand -> Codegen ()
+store ptr val =
+    voidInstr $ Store False ptr val Nothing 0 []
 
 notInstr :: Operand -> Codegen Operand
 notInstr op =
