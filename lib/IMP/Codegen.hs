@@ -513,11 +513,11 @@ newString s = do
     modify $ \s -> s { stringCount = n + 1, strings = Map.insert newName u8s strs }
 
     let sz = B.length u8s + 1
-        ty = ArrayType (fromIntegral sz) i8
+        ty = ptr $ ArrayType (fromIntegral sz) i8
         addr = GlobalReference ty newName
-        ptr = ConstantOperand $ C.GetElementPtr True addr [ C.Int (typeBits integer) 0
-                                                          , C.Int (typeBits integer) 0 ]
-    return ptr
+        op = ConstantOperand $ C.GetElementPtr True addr [ C.Int (typeBits integer) 0
+                                                         , C.Int (typeBits integer) 0 ]
+    return op
   where
     u8s = fromString s
 
