@@ -368,7 +368,7 @@ defineVar ty label = addSym (SymbolVariable ty) t label >> addDefn def
   where
     n = mkName $ getID label
     t = typeToLLVM ty
-    def = GlobalDefinition $ globalVariableDefaults { name = n, type' = t }
+    def = GlobalDefinition $ globalVariableDefaults { name = n, type' = t, initializer = Just $ Undef t }
 
 entry :: Codegen Name
 entry = gets currentBlock
