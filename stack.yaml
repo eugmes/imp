@@ -3,3 +3,5 @@ packages:
 - '.'
 extra-deps:
 - megaparsec-6.1.1
+- llvm-hs-5.0.0
+- llvm-hs-pure-5.0.0

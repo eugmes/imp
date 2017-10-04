@@ -31,10 +31,12 @@ module IMP.Codegen
     , ret
     , unreachable
     , entry
-    , call
+    , callFun
+    , callProc
     , withLoopExit
     , getVar
-    , apiCall
+    , apiFunCall
+    , apiProcCall
     , newString
     , exit
     , notInstr
@@ -130,6 +132,12 @@ stdCallAttrs CallHalt = [FA.NoReturn]
 stdCallAttrs CallDivideByZeroEx = [FA.NoReturn]
 stdCallAttrs CallIntegerOverflowEx = [FA.NoReturn]
 stdCallAttrs _ = []
+
+stdCallOp :: StandardCall -> Operand
+stdCallOp c = ConstantOperand $ GlobalReference ty $ stdCallName c
+ where
+  retty = stdCallType c
+  ty = ptr $ FunctionType retty (stdCallArgs c) False
 
 type SymbolTableEntry = (SymbolType, Operand)
 
@@ -339,13 +347,14 @@ declareFun :: I.ID -> I.Type -> [I.Type] -> LLVM ()
 declareFun label retty argtys = addSym symt t label
   where
     symt = SymbolFunction retty argtys
-    t = typeToLLVM retty
+    t = ptr $ FunctionType (typeToLLVM retty) (map typeToLLVM argtys) False
 
 -- | Declares procedure in global symbol table
 declareProc :: I.ID -> [I.Type] -> LLVM ()
-declareProc label argtys = addSym symt Type.void label
+declareProc label argtys = addSym symt t label
   where
     symt = SymbolProcedure argtys
+    t = ptr $ FunctionType VoidType (map typeToLLVM argtys) False
 
 -- | Adds global function definition
 defineSub :: I.ID -> Maybe I.Type -> [(I.Type, Located I.ID)] -> [BasicBlock] -> LLVM ()
@@ -364,7 +373,7 @@ defineSub label retty argtys body = addDefn def
 --
 -- Also adds this variable to symbol table
 defineVar :: I.Type -> I.ID -> LLVM ()
-defineVar ty label = addSym (SymbolVariable ty) t label >> addDefn def
+defineVar ty label = addSym (SymbolVariable ty) (Type.ptr t) label >> addDefn def
   where
     n = mkName $ getID label
     t = typeToLLVM ty
@@ -484,9 +493,13 @@ load :: Type -> Operand -> Codegen Operand
 load ty ptr =
     instr ty $ Load False ptr Nothing 0 []
 
-call :: Type -> Operand -> [Operand] -> Codegen Operand
-call ty fun args =
-    instr ty $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) [] []
+callFun :: Type -> Operand -> [Operand] -> [FA.FunctionAttribute] -> Codegen Operand
+callFun retty fun args attrs =
+    instr retty $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
+
+callProc :: Operand -> [Operand] -> [FA.FunctionAttribute] -> Codegen ()
+callProc fun args attrs =
+    voidInstr $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
 
 terminator :: Named Terminator -> Codegen ()
 terminator trm = do
@@ -560,15 +573,24 @@ emitStdCall c = addDefn d
                          , functionAttributes = attrs
                          }
 
-apiCall :: StandardCall -> [Operand] -> Codegen Operand
-apiCall c args = do
+apiFunCall :: StandardCall -> [Operand] -> Codegen Operand
+apiFunCall c args = do
     used <- gets apis
     modify $ \s -> s { apis = Set.insert c used }
-    instr ty $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) attrs []
+    callFun retty op args attrs
   where
-    ty = stdCallType c
-    fun = ConstantOperand $ GlobalReference ty $ stdCallName c
-    attrs = Right <$> stdCallAttrs c
+    retty = stdCallType c
+    op = stdCallOp c
+    attrs = stdCallAttrs c
+
+apiProcCall :: StandardCall -> [Operand] -> Codegen ()
+apiProcCall c args = do
+    used <- gets apis
+    modify $ \s -> s { apis = Set.insert c used }
+    callProc op args attrs
+  where
+    op = stdCallOp c
+    attrs = stdCallAttrs c
 
 namedMetadata :: ShortByteString -> [MetadataNodeID] -> LLVM ()
 namedMetadata name ids = addDefn $ NamedMetadataDefinition name ids

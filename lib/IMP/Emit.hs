@@ -9,7 +9,6 @@ import IMP.Codegen.Error
 import IMP.SourceLoc
 import qualified LLVM.AST as AST
 import LLVM.AST hiding (type')
-import qualified LLVM.AST.Type as Type
 import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.IntegerPredicate as IP
 import Control.Monad.State
@@ -125,13 +124,21 @@ gotoBlock bname = do
     cont <- addBlock "discard"
     setBlock cont
 
-codegenSubCall :: Operand -> Type -> [I.Type] -> [Located I.Expression] -> Codegen Operand
-codegenSubCall name rty args exps = do
+codegenFunCall :: Type -> Operand -> [I.Type] -> [Located I.Expression] -> Codegen Operand
+codegenFunCall retty name args exps = do
     when (length args /= length exps) $
         throwLocatedError InvalidNumberOfArguments
     vals <- mapM (withLoc codegenExpression) exps
     forM_ (zip args (map fst vals)) $ uncurry typeCheck
-    call rty name (map snd vals)
+    callFun retty name (map snd vals) []
+
+codegenProcCall :: Operand -> [I.Type] -> [Located I.Expression] -> Codegen ()
+codegenProcCall name args exps = do
+    when (length args /= length exps) $
+        throwLocatedError InvalidNumberOfArguments
+    vals <- mapM (withLoc codegenExpression) exps
+    forM_ (zip args (map fst vals)) $ uncurry typeCheck
+    callProc name (map snd vals) []
 
 codegenStatement :: I.Statement -> Codegen ()
 
@@ -176,14 +183,14 @@ codegenStatement (I.CallStatement name exps) = do
     case ty of
         SymbolVariable _ -> throwLocatedError AttemptToCallAVariable
         SymbolFunction _ _ -> throwLocatedError AttemptToCallAFunctionAsProcedure
-        SymbolProcedure args -> void $ codegenSubCall proc Type.void args exps
+        SymbolProcedure args -> codegenProcCall proc args exps
 
 codegenStatement (I.InputStatement name) = do
     (ty, ptr) <- withLoc getVar name
     case ty of
         SymbolVariable t -> do
             op <- case t of
-                I.IntegerType -> apiCall CallInputInteger []
+                I.IntegerType -> apiFunCall CallInputInteger []
                 _ -> throwLocatedError InputError
             store ptr op
         _ -> throwLocatedError InputError
@@ -193,11 +200,11 @@ codegenStatement (I.OutputStatement (I.Exp exp)) = do
     let api = case ty of
               I.IntegerType -> CallOutputInteger
               I.BooleanType -> CallOutputBoolean
-    void $ apiCall api [op]
+    apiProcCall api [op]
 
 codegenStatement (I.OutputStatement (I.Str str)) = do
     opPtr <- newString $ unLoc str
-    void $ apiCall CallOutputString [opPtr]
+    apiProcCall CallOutputString [opPtr]
 
 codegenStatement I.NullStatement = return ()
 
@@ -223,8 +230,8 @@ codegenStatement (I.ReturnValStatement exp) = do
             gotoBlock bname
         (_, Nothing) -> throwLocatedError NonVoidReturnInProcedure
 
-codegenStatement I.HaltStatement = void $ apiCall CallHalt []
-codegenStatement I.NewlineStatement = void $ apiCall CallNewline []
+codegenStatement I.HaltStatement = apiProcCall CallHalt []
+codegenStatement I.NewlineStatement = apiProcCall CallNewline []
 
 codegenExpression :: I.Expression -> Codegen (I.Type, Operand)
 codegenExpression (I.UnOpExp unaryOp expr) = do
@@ -294,7 +301,7 @@ codegenExpression (I.CallExpression name exps) = do
         SymbolVariable _ -> throwLocatedError AttemptToCallAVariable
         SymbolProcedure _ -> throwLocatedError AttemptToCallAProcedureAsFunction
         SymbolFunction rtype args -> do
-            op <- codegenSubCall fun (typeToLLVM rtype) args exps
+            op <- codegenFunCall (typeToLLVM rtype) fun args exps
             return (rtype, op)
 
 -- | Generate a division operation with division by zero check.
@@ -310,7 +317,7 @@ genDivOp ty fn leftOp rightOp = do
   cbr condOp exB divB
 
   setBlock exB
-  void $ apiCall CallDivideByZeroEx []
+  apiProcCall CallDivideByZeroEx []
   unreachable
 
   setBlock divB
@@ -322,14 +329,14 @@ genDivOp ty fn leftOp rightOp = do
 -- TODO Adjust weights of branches
 genArithCall :: I.Type -> StandardCall -> Operand -> Operand -> Codegen (I.Type, Operand)
 genArithCall ty c leftOp rightOp = do
-  op <- apiCall c [leftOp, rightOp]
+  op <- apiFunCall c [leftOp, rightOp]
   obit <- instr boolean $ ExtractValue op [1] []
   arithB <- addBlock "arith"
   exB <- addBlock "arith.ex"
   cbr obit exB arithB
 
   setBlock exB
-  void $ apiCall CallIntegerOverflowEx []
+  apiProcCall CallIntegerOverflowEx []
   unreachable
 
   setBlock arithB
