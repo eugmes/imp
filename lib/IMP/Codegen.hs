@@ -57,7 +57,6 @@ import IMP.Codegen.Error
 import qualified LLVM.AST as AST
 import LLVM.AST hiding (type', functionAttributes, metadata)
 import LLVM.AST.Type hiding (void)
-import qualified LLVM.AST.Type as Type
 import LLVM.AST.Global
 import LLVM.AST.Constant hiding (type')
 import qualified LLVM.AST.Constant as C
@@ -116,7 +115,7 @@ stdCallType CallInputInteger = integer
 stdCallType CallSAddWithOverflow = integerAndBoolean
 stdCallType CallSSubWithOverflow = integerAndBoolean
 stdCallType CallSMulWithOverflow = integerAndBoolean
-stdCallType _ = Type.void
+stdCallType _ = VoidType
 
 stdCallArgs :: StandardCall -> [Type]
 stdCallArgs CallOutputInteger = [integer]
@@ -360,7 +359,7 @@ declareProc label argtys = addSym symt t label
 defineSub :: I.ID -> Maybe I.Type -> [(I.Type, Located I.ID)] -> [BasicBlock] -> LLVM ()
 defineSub label retty argtys body = addDefn def
   where
-    t = maybe Type.void typeToLLVM retty
+    t = maybe VoidType typeToLLVM retty
     def = GlobalDefinition $
             functionDefaults { name = (mkName . getID) label
                              , parameters = ([Parameter (typeToLLVM ty) ((mkName . getID . unLoc)  nm) []
@@ -373,7 +372,7 @@ defineSub label retty argtys body = addDefn def
 --
 -- Also adds this variable to symbol table
 defineVar :: I.Type -> I.ID -> LLVM ()
-defineVar ty label = addSym (SymbolVariable ty) (Type.ptr t) label >> addDefn def
+defineVar ty label = addSym (SymbolVariable ty) (ptr t) label >> addDefn def
   where
     n = mkName $ getID label
     t = typeToLLVM ty
