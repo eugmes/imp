@@ -1,0 +1,8 @@
+var g : integer;
+
+procedure main () is
+begin
+  output("Enter number: ");
+  input(g);
+  output("Number is: "); output(g); newline;
+end main;
