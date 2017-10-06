@@ -5,9 +5,9 @@
 module IMP.Codegen.GlobalCodegen
     ( MonadCodegen(..)
     , GlobalCodegen
+    , CodegenOptions(..)
     , getSymtab
     , execGlobalCodegen
-    , emptyModule -- TODO unexport this
     , defineVar
     , declareProc
     , declareFun
@@ -43,6 +43,12 @@ class (Monad m, MonadError (Located CodegenError) m, MonadLoc m) => MonadCodegen
   emitString :: String -> m Operand
   useStdCall :: StandardCall -> m ()
 
+data CodegenOptions = CodegenOptions
+                    { sourceFileName :: FilePath
+                    , dataLayout :: DataLayout
+                    , targetTriple :: ShortByteString
+                    } deriving Show
+
 data GlobalCodegenState = GlobalCodegenState
                { currentModule :: AST.Module
                , symtab :: SymbolTable
@@ -77,20 +83,22 @@ instance MonadCodegen GlobalCodegen where
 newGlobalCodegenState :: FilePath -> AST.Module -> GlobalCodegenState
 newGlobalCodegenState fileName m = GlobalCodegenState m Tab.empty 0 Set.empty 0 (initialPos fileName)
 
-execGlobalCodegen :: FilePath -> AST.Module -> GlobalCodegen a -> Either (Located CodegenError) AST.Module
-execGlobalCodegen fileName md m =
+execGlobalCodegen :: CodegenOptions -> GlobalCodegen a -> Either (Located CodegenError) AST.Module
+execGlobalCodegen opts m =
   fmap currentModule $ runExcept $ execStateT (runGlobalCodegen m') s
  where
   m' = m >> emitCompilerInfo
-  s = newGlobalCodegenState fileName md
+  md = emptyModule opts
+  s = newGlobalCodegenState (sourceFileName opts) md
 
-emptyModule :: String -> FilePath -> DataLayout -> ShortByteString -> AST.Module
-emptyModule label sourceFile dataLayout targetTriple = defaultModule
-                                             { moduleName = fromString label
-                                             , moduleSourceFileName = fromString sourceFile
-                                             , moduleDataLayout = Just dataLayout
-                                             , moduleTargetTriple = Just targetTriple
-                                             }
+emptyModule :: CodegenOptions -> AST.Module
+emptyModule opts =
+  defaultModule
+    { moduleName = fromString $ sourceFileName opts
+    , moduleSourceFileName = fromString $ sourceFileName opts
+    , moduleDataLayout = Just $ dataLayout opts
+    , moduleTargetTriple = Just $ targetTriple opts
+    }
 
 getSymtab :: GlobalCodegen SymbolTable
 getSymtab = gets symtab

@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module IMP.Emit (codegenProgram) where
+module IMP.Emit ( CodegenOptions(..)
+                , compileProgram
+                ) where
 
 import qualified IMP.AST as I
 import IMP.AST (getID)
@@ -14,6 +16,9 @@ import LLVM.AST hiding (type')
 import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.IntegerPredicate as IP
 import Control.Monad.State
+
+compileProgram :: CodegenOptions -> I.Program -> Either (Located CodegenError) AST.Module
+compileProgram opts = execGlobalCodegen opts . codegenProgram
 
 codegenProgram :: I.Program -> GlobalCodegen ()
 codegenProgram (I.Program vars subs) = do

@@ -3,7 +3,6 @@
 module Main where
 
 import IMP.Parser
-import IMP.Codegen.GlobalCodegen
 import IMP.Codegen.Error
 import IMP.Emit
 import IMP.AST (Program)
@@ -50,8 +49,9 @@ genCode o text name pgm =
     withHostTargetMachine $ \target -> do
       dataLayout <- getTargetMachineDataLayout target
       targetTriple <- getTargetMachineTriple target
-      let mod = emptyModule name name dataLayout targetTriple
-      case execGlobalCodegen name mod $ codegenProgram pgm of
+      let opts = CodegenOptions name dataLayout targetTriple
+
+      case compileProgram opts pgm of
         Left err -> do
           putStrLn $ locatedErrorPretty text err
           exitFailure
