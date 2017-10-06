@@ -45,7 +45,7 @@ codegenSubDecl (I.Function name params retty _ _) =
 
 codegenSub' :: Located I.ID -> Maybe I.Type -> [Located I.ParamList] -> [Located I.VarDec] -> [Located I.Statement] -> GlobalCodegen ()
 codegenSub' name retty params vars body = do
-    blocks <- execCodegen cg
+    blocks <- execSubCodegen cg
     defineSub (unLoc name) retty args blocks
   where
     args = toSig params
@@ -85,22 +85,22 @@ codegenSub (I.Function name params retty vars body) = do
     when (unLoc name == I.ID "main") $ throwLocatedError MainIsAFunction
     codegenSub' name (Just $ unLoc retty) params vars body
 
-codegenLocals :: [Located I.VarDec] -> Codegen ()
+codegenLocals :: [Located I.VarDec] -> SubCodegen ()
 codegenLocals = mapM_ $ withLoc codegenLocals'
 
-codegenLocals' :: I.VarDec -> Codegen ()
+codegenLocals' :: I.VarDec -> SubCodegen ()
 codegenLocals' (I.VarDec names ty) = mapM_ (withLoc $ \n -> codegenLocal n $ unLoc ty) names
 
-codegenLocal :: I.ID -> I.Type -> Codegen ()
+codegenLocal :: I.ID -> I.Type -> SubCodegen ()
 codegenLocal name ty = do
     var <- alloca (getID name) $ typeToLLVM ty
     defineLocalVar name ty var
 
-typeCheck :: I.Type -> I.Type -> Codegen ()
+typeCheck :: I.Type -> I.Type -> SubCodegen ()
 typeCheck lt rt =
     when (lt /= rt) $ throwLocatedError $ TypeMismatch lt rt
 
-maybeGenBlock :: String -> Name -> [Located I.Statement] -> Codegen Name
+maybeGenBlock :: String -> Name -> [Located I.Statement] -> SubCodegen Name
 maybeGenBlock _ contName [] = return contName
 
 -- TODO add block stack
@@ -118,13 +118,13 @@ maybeGenBlock newTemlate contName stmts = do
 --
 -- Sets a new active block. Operations emitted into this
 -- block will be discarded
-gotoBlock :: Name -> Codegen ()
+gotoBlock :: Name -> SubCodegen ()
 gotoBlock bname = do
     br bname
     cont <- addBlock "discard"
     setBlock cont
 
-codegenFunCall :: Type -> Operand -> [I.Type] -> [Located I.Expression] -> Codegen Operand
+codegenFunCall :: Type -> Operand -> [I.Type] -> [Located I.Expression] -> SubCodegen Operand
 codegenFunCall retty name args exps = do
     when (length args /= length exps) $
         throwLocatedError InvalidNumberOfArguments
@@ -132,7 +132,7 @@ codegenFunCall retty name args exps = do
     forM_ (zip args (map fst vals)) $ uncurry typeCheck
     callFun retty name (map snd vals) []
 
-codegenProcCall :: Operand -> [I.Type] -> [Located I.Expression] -> Codegen ()
+codegenProcCall :: Operand -> [I.Type] -> [Located I.Expression] -> SubCodegen ()
 codegenProcCall name args exps = do
     when (length args /= length exps) $
         throwLocatedError InvalidNumberOfArguments
@@ -140,7 +140,7 @@ codegenProcCall name args exps = do
     forM_ (zip args (map fst vals)) $ uncurry typeCheck
     callProc name (map snd vals) []
 
-codegenStatement :: I.Statement -> Codegen ()
+codegenStatement :: I.Statement -> SubCodegen ()
 
 codegenStatement (I.IfStatement cond ifTrue ifFalse) = do
     op <- withLoc (codegenExpression >=> check) cond
@@ -233,7 +233,7 @@ codegenStatement (I.ReturnValStatement exp) = do
 codegenStatement I.HaltStatement = apiProcCall CallHalt []
 codegenStatement I.NewlineStatement = apiProcCall CallNewline []
 
-codegenExpression :: I.Expression -> Codegen (I.Type, Operand)
+codegenExpression :: I.Expression -> SubCodegen (I.Type, Operand)
 codegenExpression (I.UnOpExp unaryOp expr) = do
     (ty, fOp) <- withLoc codegenExpression expr
     case (unaryOp, ty) of
@@ -308,8 +308,8 @@ codegenExpression (I.CallExpression name exps) = do
 --
 -- TODO Make check optional
 -- TODO Adjust weights of branches
-genDivOp :: I.Type -> (Operand -> Operand -> Codegen (I.Type, Operand))
-            -> Operand -> Operand -> Codegen (I.Type, Operand)
+genDivOp :: I.Type -> (Operand -> Operand -> SubCodegen (I.Type, Operand))
+            -> Operand -> Operand -> SubCodegen (I.Type, Operand)
 genDivOp ty fn leftOp rightOp = do
   condOp <- instr boolean $ AST.ICmp IP.EQ rightOp (constZero $ typeToLLVM ty) []
   divB <- addBlock "div"
@@ -327,7 +327,7 @@ genDivOp ty fn leftOp rightOp = do
 --
 -- TODO Make check optional
 -- TODO Adjust weights of branches
-genArithCall :: I.Type -> StandardCall -> Operand -> Operand -> Codegen (I.Type, Operand)
+genArithCall :: I.Type -> StandardCall -> Operand -> Operand -> SubCodegen (I.Type, Operand)
 genArithCall ty c leftOp rightOp = do
   op <- apiFunCall c [leftOp, rightOp]
   obit <- instr boolean $ ExtractValue op [1] []
@@ -343,6 +343,6 @@ genArithCall ty c leftOp rightOp = do
   res <- instr (typeToLLVM ty) $ ExtractValue op [0] []
   return (ty, res)
 
-checkBoolean :: CodegenError -> (I.Type, Operand) -> Codegen Operand
+checkBoolean :: CodegenError -> (I.Type, Operand) -> SubCodegen Operand
 checkBoolean _ (I.BooleanType, op) = return op
 checkBoolean err _ = throwLocatedError err

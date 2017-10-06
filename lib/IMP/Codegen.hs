@@ -6,7 +6,7 @@
 module IMP.Codegen
     ( GlobalCodegen
     , StandardCall (..)
-    , Codegen
+    , SubCodegen
     , SymbolType (..)
     , loopExitBlock
     , execGlobalCodegen
@@ -15,7 +15,7 @@ module IMP.Codegen
     , defineVar
     , declareProc
     , declareFun
-    , execCodegen
+    , execSubCodegen
     , defineSub
     , addBlock
     , entryBlockName -- TODO unexport those
@@ -146,33 +146,33 @@ type SymbolTable = Tab.SymbolTable I.ID SymbolTableEntry
 
 type Names = Map.Map String Int
 
-data CodegenState = CodegenState
-                  { currentBlock :: Name
-                  -- |^ Name of the active block to append to
-                  , exitBlock :: Maybe Name
-                  -- |^ Block containing return
-                  , loopExitBlock :: Maybe Name
-                  -- |^ Exit block for innermost loop
-                  , subReturn :: Maybe (I.Type, Operand)
-                  -- |^ Subroutine return type and location
-                  , blocks :: Map.Map Name BlockState
-                  -- |^ Blocks of function
-                  , symtab :: SymbolTable
-                  -- |^ Function scope symbol table
-                  , blockCount :: Int
-                  -- |^ Count of basic blocks
-                  , count :: Word
-                  -- |^ Count of unnamed instructions
-                  , names :: Names
-                  -- |^ Name supply
-                  , stringCount :: Word
-                  -- |^ Count of emitted strings
-                  , strings :: Map.Map Name U8.ByteString
-                  -- |^ Emitted strings
-                  , apis :: Set.Set StandardCall
-                  -- |^ Used standard calls
-                  , currentLocation :: SourcePos
-                  } deriving Show
+data SubCodegenState = SubCodegenState
+                     { currentBlock :: Name
+                     -- |^ Name of the active block to append to
+                     , exitBlock :: Maybe Name
+                     -- |^ Block containing return
+                     , loopExitBlock :: Maybe Name
+                     -- |^ Exit block for innermost loop
+                     , subReturn :: Maybe (I.Type, Operand)
+                     -- |^ Subroutine return type and location
+                     , blocks :: Map.Map Name BlockState
+                     -- |^ Blocks of function
+                     , symtab :: SymbolTable
+                     -- |^ Function scope symbol table
+                     , blockCount :: Int
+                     -- |^ Count of basic blocks
+                     , count :: Word
+                     -- |^ Count of unnamed instructions
+                     , names :: Names
+                     -- |^ Name supply
+                     , stringCount :: Word
+                     -- |^ Count of emitted strings
+                     , strings :: Map.Map Name U8.ByteString
+                     -- |^ Emitted strings
+                     , apis :: Set.Set StandardCall
+                     -- |^ Used standard calls
+                     , currentLocation :: SourcePos
+                     } deriving Show
 
 data BlockState = BlockState
                 { idx :: Int
@@ -186,16 +186,16 @@ data BlockState = BlockState
 emptyBlock :: Int -> BlockState
 emptyBlock ix = BlockState ix [] Nothing
 
-newtype Codegen a = Codegen
-                  { runCodegen :: StateT CodegenState (Except (Located CodegenError)) a
-                  } deriving ( Functor
-                             , Applicative
-                             , Monad
-                             , MonadError (Located CodegenError)
-                             , MonadState CodegenState
-                             )
+newtype SubCodegen a = SubCodegen
+                     { runSubCodegen :: StateT SubCodegenState (Except (Located CodegenError)) a
+                     } deriving ( Functor
+                                , Applicative
+                                , Monad
+                                , MonadError (Located CodegenError)
+                                , MonadState SubCodegenState
+                                )
 
-instance MonadLoc Codegen where
+instance MonadLoc SubCodegen where
   withLoc f x = do
     oldLoc <- gets currentLocation
     modify $ \s -> s { currentLocation = getLoc x }
@@ -210,7 +210,7 @@ sortBlocks = sortBy (compare `on` (idx . snd))
 
 type MonadCodegenError m = (MonadLoc m, MonadError (Located CodegenError) m)
 
-createBlocks :: MonadCodegenError m => CodegenState -> m [BasicBlock]
+createBlocks :: MonadCodegenError m => SubCodegenState -> m [BasicBlock]
 createBlocks = traverse makeBlock . sortBlocks . Map.toList . blocks
 
 makeBlock :: MonadCodegenError m => (Name, BlockState) -> m BasicBlock
@@ -223,14 +223,14 @@ entryBlockName, exitBlockName :: String
 entryBlockName = "entry"
 exitBlockName = "exit"
 
-newCodegen :: SourcePos -> GlobalCodegen CodegenState
-newCodegen pos = do
+newSubCodegen :: SourcePos -> GlobalCodegen SubCodegenState
+newSubCodegen pos = do
     syms <- gets globalSymtab
     strCount <- gets globalStringsCount
     strs <- gets globalStrings -- TODO check if this is really needed
     usedCalls <- gets globalUsedCalls
 
-    return CodegenState
+    return SubCodegenState
                 { currentBlock = mkName entryBlockName
                 , exitBlock = Nothing
                 , loopExitBlock = Nothing
@@ -246,11 +246,11 @@ newCodegen pos = do
                 , currentLocation = pos
                 }
 
-execCodegen :: Codegen a -> GlobalCodegen [BasicBlock]
-execCodegen m = do
+execSubCodegen :: SubCodegen a -> GlobalCodegen [BasicBlock]
+execSubCodegen m = do
     pos <- currentLoc
-    cg <- newCodegen pos
-    let res = runExcept $ execStateT (runCodegen m) cg
+    cg <- newSubCodegen pos
+    let res = runExcept $ execStateT (runSubCodegen m) cg
     case res of
       Left err -> throwError err
       Right cgen -> do
@@ -260,7 +260,7 @@ execCodegen m = do
                          }
         createBlocks cgen
 
-withLoopExit :: Name -> Codegen a -> Codegen a
+withLoopExit :: Name -> SubCodegen a -> SubCodegen a
 withLoopExit newExitB m = do
     oldExitB <- gets loopExitBlock
     modify $ \s -> s { loopExitBlock = Just newExitB }
@@ -384,10 +384,10 @@ defineVar ty label = addSym (SymbolVariable ty) (ptr t) label >> addDefn def
     t = typeToLLVM ty
     def = GlobalDefinition $ globalVariableDefaults { name = n, type' = t, initializer = Just $ Undef t }
 
-entry :: Codegen Name
+entry :: SubCodegen Name
 entry = gets currentBlock
 
-exit :: Codegen (Name, Maybe (I.Type, Operand))
+exit :: SubCodegen (Name, Maybe (I.Type, Operand))
 exit = do
     b <- gets exitBlock
     case b of
@@ -396,7 +396,7 @@ exit = do
             return (bname, t)
         Nothing -> throwLocatedError $ InternalError "Exit block was not set."
 
-addBlock :: String -> Codegen Name
+addBlock :: String -> SubCodegen Name
 addBlock bname = do
     bls <- gets blocks
     ix <- gets blockCount
@@ -411,19 +411,19 @@ addBlock bname = do
                      }
     return $ mkName qname
 
-setBlock :: Name -> Codegen ()
+setBlock :: Name -> SubCodegen ()
 setBlock bname = modify $ \s -> s { currentBlock = bname }
 
-setExitBlock :: Maybe (I.Type, Operand) -> Name -> Codegen ()
+setExitBlock :: Maybe (I.Type, Operand) -> Name -> SubCodegen ()
 setExitBlock ty bname =
     modify $ \s -> s { subReturn = ty, exitBlock = Just bname }
 
-modifyBlock :: BlockState -> Codegen ()
+modifyBlock :: BlockState -> SubCodegen ()
 modifyBlock new = do
     active <- gets currentBlock
     modify $ \s -> s { blocks = Map.insert active new (blocks s) }
 
-current :: Codegen BlockState
+current :: SubCodegen BlockState
 current = do
     c <- gets currentBlock
     blks <- gets blocks
@@ -431,7 +431,7 @@ current = do
         Just x -> return x
         Nothing -> throwLocatedError $ InternalError $ printf "No such block: '%s'" (show c)
 
-fresh :: Codegen Word
+fresh :: SubCodegen Word
 fresh = do
     i <- gets count
     modify $ \s -> s { count = i + 1 }
@@ -446,7 +446,7 @@ uniqueName nm ns =
 local :: Type -> Name -> Operand
 local = LocalReference
 
-defineLocalVar :: I.ID -> I.Type -> Operand -> Codegen ()
+defineLocalVar :: I.ID -> I.Type -> Operand -> SubCodegen ()
 defineLocalVar name ty x = do
     syms <- gets symtab
     case Tab.insert name (SymbolVariable ty, x) syms of
@@ -455,75 +455,75 @@ defineLocalVar name ty x = do
         Right syms' ->
             modify $ \s -> s { symtab = syms' }
 
-getVar :: I.ID -> Codegen (SymbolType, Operand)
+getVar :: I.ID -> SubCodegen (SymbolType, Operand)
 getVar var = do
     syms <- gets symtab
     case Tab.lookup var syms of
         Just x -> return x
         Nothing -> throwLocatedError $ SymbolNotInScope var
 
-instr :: Type -> Instruction -> Codegen Operand
+instr :: Type -> Instruction -> SubCodegen Operand
 instr ty ins = do
     ref <- UnName <$> fresh
     namedInstr ref ty ins
 
-instr' :: String -> Type -> Instruction -> Codegen Operand
+instr' :: String -> Type -> Instruction -> SubCodegen Operand
 instr' n = namedInstr (mkName n)
 
-namedInstr :: Name -> Type -> Instruction -> Codegen Operand
+namedInstr :: Name -> Type -> Instruction -> SubCodegen Operand
 namedInstr ref ty ins = do
     blk <- current
     let i = stack blk
     modifyBlock (blk { stack = (ref := ins) : i})
     return $ local ty ref
 
-voidInstr :: Instruction -> Codegen ()
+voidInstr :: Instruction -> SubCodegen ()
 voidInstr ins = do
   blk <- current
   let i = stack blk
   modifyBlock (blk { stack = Do ins : i})
 
-alloca :: String -> Type -> Codegen Operand
+alloca :: String -> Type -> SubCodegen Operand
 alloca n ty = instr' n ty $ Alloca ty Nothing 0 []
 
-store :: Operand -> Operand -> Codegen ()
+store :: Operand -> Operand -> SubCodegen ()
 store ptr val =
     voidInstr $ Store False ptr val Nothing 0 []
 
-notInstr :: Operand -> Codegen Operand
+notInstr :: Operand -> SubCodegen Operand
 notInstr op =
     instr boolean $ AST.Xor constTrue op []
 
-load :: Type -> Operand -> Codegen Operand
+load :: Type -> Operand -> SubCodegen Operand
 load ty ptr =
     instr ty $ Load False ptr Nothing 0 []
 
-callFun :: Type -> Operand -> [Operand] -> [FA.FunctionAttribute] -> Codegen Operand
+callFun :: Type -> Operand -> [Operand] -> [FA.FunctionAttribute] -> SubCodegen Operand
 callFun retty fun args attrs =
     instr retty $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
 
-callProc :: Operand -> [Operand] -> [FA.FunctionAttribute] -> Codegen ()
+callProc :: Operand -> [Operand] -> [FA.FunctionAttribute] -> SubCodegen ()
 callProc fun args attrs =
     voidInstr $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
 
-terminator :: Named Terminator -> Codegen ()
+terminator :: Named Terminator -> SubCodegen ()
 terminator trm = do
     blk <- current
     modifyBlock (blk { term = Just trm })
 
-br :: Name -> Codegen ()
+br :: Name -> SubCodegen ()
 br val = terminator $ Do $ Br val []
 
-cbr :: Operand -> Name -> Name -> Codegen ()
+cbr :: Operand -> Name -> Name -> SubCodegen ()
 cbr cond tr fl = terminator $ Do $ CondBr cond tr fl []
 
-ret :: Maybe Operand -> Codegen ()
+ret :: Maybe Operand -> SubCodegen ()
 ret val = terminator $ Do $ Ret val []
 
-unreachable :: Codegen ()
+unreachable :: SubCodegen ()
 unreachable = terminator $ Do $ Unreachable []
 
-newString :: String -> Codegen Operand
+newString :: String -> SubCodegen Operand
 newString s = do
     n <- gets stringCount
     strs <- gets strings
@@ -578,7 +578,7 @@ emitStdCall c = addDefn d
                          , functionAttributes = attrs
                          }
 
-apiFunCall :: StandardCall -> [Operand] -> Codegen Operand
+apiFunCall :: StandardCall -> [Operand] -> SubCodegen Operand
 apiFunCall c args = do
     used <- gets apis
     modify $ \s -> s { apis = Set.insert c used }
@@ -588,7 +588,7 @@ apiFunCall c args = do
     op = stdCallOp c
     attrs = stdCallAttrs c
 
-apiProcCall :: StandardCall -> [Operand] -> Codegen ()
+apiProcCall :: StandardCall -> [Operand] -> SubCodegen ()
 apiProcCall c args = do
     used <- gets apis
     modify $ \s -> s { apis = Set.insert c used }
