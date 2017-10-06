@@ -13,14 +13,14 @@ import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.IntegerPredicate as IP
 import Control.Monad.State
 
-codegenProgram :: I.Program -> LLVM ()
+codegenProgram :: I.Program -> GlobalCodegen ()
 codegenProgram (I.Program vars subs) = do
     mapM_ (withLoc codegenVars) vars
     mapM_ (withLoc codegenSubDecl) subs
     mapM_ (withLoc codegenSub) subs
-    finalizeLLVM
+    finalizeGlobalCodegen
 
-codegenVars :: I.VarDec -> LLVM ()
+codegenVars :: I.VarDec -> GlobalCodegen ()
 codegenVars (I.VarDec names t) = mapM_ (withLoc $ defineVar $ unLoc t) names
 
 toSig :: [Located I.ParamList] -> [(I.Type, Located I.ID)]
@@ -32,7 +32,7 @@ toSig = concatMap (toSig' . unLoc)
 paramTypes :: [Located I.ParamList] -> [I.Type]
 paramTypes = fmap fst . toSig
 
-codegenSubDecl :: I.Subroutine -> LLVM ()
+codegenSubDecl :: I.Subroutine -> GlobalCodegen ()
 codegenSubDecl (I.Procedure name params _ _) =
     withLoc (`declareProc` ts) name
   where
@@ -43,7 +43,7 @@ codegenSubDecl (I.Function name params retty _ _) =
   where
     ts = paramTypes params
 
-codegenSub' :: Located I.ID -> Maybe I.Type -> [Located I.ParamList] -> [Located I.VarDec] -> [Located I.Statement] -> LLVM ()
+codegenSub' :: Located I.ID -> Maybe I.Type -> [Located I.ParamList] -> [Located I.VarDec] -> [Located I.Statement] -> GlobalCodegen ()
 codegenSub' name retty params vars body = do
     blocks <- execCodegen cg
     defineSub (unLoc name) retty args blocks
@@ -75,7 +75,7 @@ codegenSub' name retty params vars body = do
             Nothing -> ret Nothing
             Just (ty, op) -> load (typeToLLVM ty) op >>= ret . Just
 
-codegenSub :: I.Subroutine -> LLVM ()
+codegenSub :: I.Subroutine -> GlobalCodegen ()
 codegenSub (I.Procedure name params vars body) = do
     when ((unLoc name == I.ID "main") && not (null params)) $
         throwLocatedError MainHasArguments

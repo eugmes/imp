@@ -51,7 +51,7 @@ genCode o text name pgm =
       dataLayout <- getTargetMachineDataLayout target
       targetTriple <- getTargetMachineTriple target
       let mod = emptyModule name name dataLayout targetTriple
-      case execLLVM name mod $ codegenProgram pgm of
+      case execGlobalCodegen name mod $ codegenProgram pgm of
         Left err -> do
           putStrLn $ locatedErrorPretty text err
           exitFailure

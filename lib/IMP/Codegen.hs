@@ -4,14 +4,14 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module IMP.Codegen
-    ( LLVM
+    ( GlobalCodegen
     , StandardCall (..)
     , Codegen
     , SymbolType (..)
     , loopExitBlock
-    , execLLVM
+    , execGlobalCodegen
     , emptyModule -- TODO unexport this
-    , finalizeLLVM
+    , finalizeGlobalCodegen
     , defineVar
     , declareProc
     , declareFun
@@ -223,7 +223,7 @@ entryBlockName, exitBlockName :: String
 entryBlockName = "entry"
 exitBlockName = "exit"
 
-newCodegen :: SourcePos -> LLVM CodegenState
+newCodegen :: SourcePos -> GlobalCodegen CodegenState
 newCodegen pos = do
     syms <- gets globalSymtab
     strCount <- gets globalStringsCount
@@ -246,7 +246,7 @@ newCodegen pos = do
                 , currentLocation = pos
                 }
 
-execCodegen :: Codegen a -> LLVM [BasicBlock]
+execCodegen :: Codegen a -> GlobalCodegen [BasicBlock]
 execCodegen m = do
     pos <- currentLoc
     cg <- newCodegen pos
@@ -268,7 +268,7 @@ withLoopExit newExitB m = do
     modify $ \s -> s { loopExitBlock = oldExitB }
     return r
 
-data LLVMState = LLVMState
+data GlobalCodegenState = GlobalCodegenState
                { currentModule :: AST.Module
                , globalSymtab :: SymbolTable
                , globalStringsCount :: Word
@@ -278,14 +278,15 @@ data LLVMState = LLVMState
                , globalLocation :: SourcePos
                } deriving Show
 
-newtype LLVM a = LLVM { runLLVM :: StateT LLVMState (Except (Located CodegenError)) a }
-    deriving ( Functor
-             , Applicative
-             , Monad
-             , MonadState LLVMState
-             , MonadError (Located CodegenError))
+newtype GlobalCodegen a = GlobalCodegen
+                        { runGlobalCodegen :: StateT GlobalCodegenState (Except (Located CodegenError)) a
+                        } deriving ( Functor
+                                   , Applicative
+                                   , Monad
+                                   , MonadState GlobalCodegenState
+                                   , MonadError (Located CodegenError))
 
-instance MonadLoc LLVM where
+instance MonadLoc GlobalCodegen where
   withLoc f x = do
     oldLoc <- gets globalLocation
     modify $ \s -> s { globalLocation = getLoc x }
@@ -295,11 +296,12 @@ instance MonadLoc LLVM where
 
   currentLoc = gets globalLocation
 
-newLLVMState :: FilePath -> AST.Module -> LLVMState
-newLLVMState fileName m = LLVMState m Tab.empty 0 Map.empty Set.empty 0 (initialPos fileName)
+newGlobalCodegenState :: FilePath -> AST.Module -> GlobalCodegenState
+newGlobalCodegenState fileName m = GlobalCodegenState m Tab.empty 0 Map.empty Set.empty 0 (initialPos fileName)
 
-execLLVM :: FilePath -> AST.Module -> LLVM a -> Either (Located CodegenError) AST.Module
-execLLVM fileName md m = fmap currentModule $ runExcept $ execStateT (runLLVM m) (newLLVMState fileName md)
+execGlobalCodegen :: FilePath -> AST.Module -> GlobalCodegen a -> Either (Located CodegenError) AST.Module
+execGlobalCodegen fileName md m =
+  fmap currentModule $ runExcept $ execStateT (runGlobalCodegen m) (newGlobalCodegenState fileName md)
 
 emptyModule :: String -> FilePath -> DataLayout -> ShortByteString -> AST.Module
 emptyModule label sourceFile dataLayout targetTriple = defaultModule
@@ -329,7 +331,7 @@ typeToLLVM I.BooleanType = boolean
 -- | Add symbol to the global symbol table
 --
 -- TODO Insert location information into symbol table
-addSym :: SymbolType -> Type -> I.ID -> LLVM ()
+addSym :: SymbolType -> Type -> I.ID -> GlobalCodegen ()
 addSym st lt n = do
     syms <- gets globalSymtab
     let sym = (st, ConstantOperand $ GlobalReference lt (mkName $ getID n))
@@ -338,7 +340,7 @@ addSym st lt n = do
         Right syms' -> modify $ \s -> s { globalSymtab = syms' }
 
 -- | Add global definition
-addDefn :: Definition -> LLVM ()
+addDefn :: Definition -> GlobalCodegen ()
 addDefn d = do
     m <- gets currentModule
 
@@ -346,21 +348,21 @@ addDefn d = do
     modify $ \s -> s { currentModule = m { moduleDefinitions = defs ++ [d] }}
 
 -- | Declares function in global symbol table
-declareFun :: I.ID -> I.Type -> [I.Type] -> LLVM ()
+declareFun :: I.ID -> I.Type -> [I.Type] -> GlobalCodegen ()
 declareFun label retty argtys = addSym symt t label
   where
     symt = SymbolFunction retty argtys
     t = ptr $ FunctionType (typeToLLVM retty) (map typeToLLVM argtys) False
 
 -- | Declares procedure in global symbol table
-declareProc :: I.ID -> [I.Type] -> LLVM ()
+declareProc :: I.ID -> [I.Type] -> GlobalCodegen ()
 declareProc label argtys = addSym symt t label
   where
     symt = SymbolProcedure argtys
     t = ptr $ FunctionType VoidType (map typeToLLVM argtys) False
 
 -- | Adds global function definition
-defineSub :: I.ID -> Maybe I.Type -> [(I.Type, Located I.ID)] -> [BasicBlock] -> LLVM ()
+defineSub :: I.ID -> Maybe I.Type -> [(I.Type, Located I.ID)] -> [BasicBlock] -> GlobalCodegen ()
 defineSub label retty argtys body = addDefn def
   where
     t = maybe VoidType typeToLLVM retty
@@ -375,7 +377,7 @@ defineSub label retty argtys body = addDefn def
 -- | Add global variable definition
 --
 -- Also adds this variable to symbol table
-defineVar :: I.Type -> I.ID -> LLVM ()
+defineVar :: I.Type -> I.ID -> GlobalCodegen ()
 defineVar ty label = addSym (SymbolVariable ty) (ptr t) label >> addDefn def
   where
     n = mkName $ getID label
@@ -537,12 +539,12 @@ newString s = do
   where
     u8s = fromString s
 
-emitStrings :: LLVM ()
+emitStrings :: GlobalCodegen ()
 emitStrings = do
     strings <- Map.toList <$> gets globalStrings
     mapM_ emitString strings
 
-emitString :: (Name, U8.ByteString) -> LLVM ()
+emitString :: (Name, U8.ByteString) -> GlobalCodegen ()
 emitString (n, content) = addDefn d
   where
     vals = map (C.Int 8 . fromIntegral) (B.unpack content ++ [0])
@@ -557,12 +559,12 @@ emitString (n, content) = addDefn d
                                                    , elementType = i8 }
                                , initializer = Just ini }
 
-emitStdCalls :: LLVM ()
+emitStdCalls :: GlobalCodegen ()
 emitStdCalls = do
     apis <- Set.toList <$> gets globalUsedCalls
     mapM_ emitStdCall apis
 
-emitStdCall :: StandardCall -> LLVM ()
+emitStdCall :: StandardCall -> GlobalCodegen ()
 emitStdCall c = addDefn d
   where
     retty = stdCallType c
@@ -595,28 +597,28 @@ apiProcCall c args = do
     op = stdCallOp c
     attrs = stdCallAttrs c
 
-namedMetadata :: ShortByteString -> [MetadataNodeID] -> LLVM ()
+namedMetadata :: ShortByteString -> [MetadataNodeID] -> GlobalCodegen ()
 namedMetadata name ids = addDefn $ NamedMetadataDefinition name ids
 
-newMetadataNodeID :: LLVM MetadataNodeID
+newMetadataNodeID :: GlobalCodegen MetadataNodeID
 newMetadataNodeID = do
   metadataCount <- gets globalMetadataCount
   modify $ \s -> s { globalMetadataCount = metadataCount + 1 }
   return $ MetadataNodeID metadataCount
 
-metadata :: [Maybe Metadata] -> LLVM MetadataNodeID
+metadata :: [Maybe Metadata] -> GlobalCodegen MetadataNodeID
 metadata defs = do
   nd <- newMetadataNodeID
   addDefn $ MetadataNodeDefinition nd defs
   return nd
 
-emitCompilerInfo :: LLVM ()
+emitCompilerInfo :: GlobalCodegen ()
 emitCompilerInfo = do
   nd <- metadata [Just $ MDString $ fromString $ "IMP version " ++ showVersion version]
   namedMetadata "llvm.ident" [nd]
 
-finalizeLLVM :: LLVM ()
-finalizeLLVM = do
+finalizeGlobalCodegen :: GlobalCodegen ()
+finalizeGlobalCodegen = do
   emitStrings
   emitStdCalls
   emitCompilerInfo
