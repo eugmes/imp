@@ -3,7 +3,7 @@
 module Main where
 
 import IMP.Parser
-import IMP.Codegen
+import IMP.Codegen.GlobalCodegen
 import IMP.Codegen.Error
 import IMP.Emit
 import IMP.AST (Program)

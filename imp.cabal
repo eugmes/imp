@@ -24,7 +24,9 @@ library
   exposed-modules:     IMP.AST
                      , IMP.Parser
                      , IMP.Parser.Error
-                     , IMP.Codegen
+                     , IMP.Codegen.GlobalCodegen
+                     , IMP.Codegen.SubCodegen
+                     , IMP.Codegen.Utils
                      , IMP.Codegen.Error
                      , IMP.Emit
                      , IMP.SymbolTable

@@ -4,7 +4,9 @@ module IMP.Emit (codegenProgram) where
 
 import qualified IMP.AST as I
 import IMP.AST (getID)
-import IMP.Codegen
+import IMP.Codegen.GlobalCodegen
+import IMP.Codegen.SubCodegen
+import IMP.Codegen.Utils
 import IMP.Codegen.Error
 import IMP.SourceLoc
 import qualified LLVM.AST as AST
@@ -18,7 +20,6 @@ codegenProgram (I.Program vars subs) = do
     mapM_ (withLoc codegenVars) vars
     mapM_ (withLoc codegenSubDecl) subs
     mapM_ (withLoc codegenSub) subs
-    finalizeGlobalCodegen
 
 codegenVars :: I.VarDec -> GlobalCodegen ()
 codegenVars (I.VarDec names t) = mapM_ (withLoc $ defineVar $ unLoc t) names
@@ -50,8 +51,8 @@ codegenSub' name retty params vars body = do
   where
     args = toSig params
     cg = do
-        entry <- addBlock entryBlockName
-        exit <- addBlock exitBlockName
+        entry <- addBlock "entry"
+        exit <- addBlock "exit"
         setBlock entry
         retval <- case retty of
                       Nothing -> return Nothing
@@ -64,7 +65,7 @@ codegenSub' name retty params vars body = do
         forM_ args $ \(ty, a) -> do
             let t = typeToLLVM ty
             var <- alloca (getID (unLoc a) ++ ".addr") t
-            store var $ local t $ mkName $ getID $ unLoc a
+            store var $ LocalReference t $ mkName $ getID $ unLoc a
             withLoc (\n -> defineLocalVar n ty var) a
         codegenLocals vars
         mapM_ (withLoc codegenStatement) body
@@ -103,7 +104,6 @@ typeCheck lt rt =
 maybeGenBlock :: String -> Name -> [Located I.Statement] -> SubCodegen Name
 maybeGenBlock _ contName [] = return contName
 
--- TODO add block stack
 maybeGenBlock newTemlate contName stmts = do
     e <- entry
     newName <- addBlock newTemlate
@@ -124,21 +124,20 @@ gotoBlock bname = do
     cont <- addBlock "discard"
     setBlock cont
 
-codegenFunCall :: Type -> Operand -> [I.Type] -> [Located I.Expression] -> SubCodegen Operand
-codegenFunCall retty name args exps = do
+-- | Generate and typecheck subroutine arguments
+--
+-- Errors are reported at location of argument that have caused that error.
+codegenArgs :: [I.Type] -> [Located I.Expression] -> SubCodegen [Operand]
+codegenArgs args exps = do
     when (length args /= length exps) $
         throwLocatedError InvalidNumberOfArguments
-    vals <- mapM (withLoc codegenExpression) exps
-    forM_ (zip args (map fst vals)) $ uncurry typeCheck
-    callFun retty name (map snd vals) []
-
-codegenProcCall :: Operand -> [I.Type] -> [Located I.Expression] -> SubCodegen ()
-codegenProcCall name args exps = do
-    when (length args /= length exps) $
-        throwLocatedError InvalidNumberOfArguments
-    vals <- mapM (withLoc codegenExpression) exps
-    forM_ (zip args (map fst vals)) $ uncurry typeCheck
-    callProc name (map snd vals) []
+    vals <- mapM genExp exps
+    mapM_ check $ zipLoc args vals
+    return $ map (snd . unLoc) vals
+  where
+    genExp exp@(Located l _) = Located l <$> withLoc codegenExpression exp
+    zipLoc = zipWith $ \t1 (Located l (t2, _)) -> Located l (t1, t2)
+    check = withLoc $ uncurry typeCheck
 
 codegenStatement :: I.Statement -> SubCodegen ()
 
@@ -183,7 +182,9 @@ codegenStatement (I.CallStatement name exps) = do
     case ty of
         SymbolVariable _ -> throwLocatedError AttemptToCallAVariable
         SymbolFunction _ _ -> throwLocatedError AttemptToCallAFunctionAsProcedure
-        SymbolProcedure args -> codegenProcCall proc args exps
+        SymbolProcedure args -> do
+          argOps <- codegenArgs args exps
+          callProc proc argOps []
 
 codegenStatement (I.InputStatement name) = do
     (ty, ptr) <- withLoc getVar name
@@ -203,7 +204,7 @@ codegenStatement (I.OutputStatement (I.Exp exp)) = do
     apiProcCall api [op]
 
 codegenStatement (I.OutputStatement (I.Str str)) = do
-    opPtr <- newString $ unLoc str
+    opPtr <- emitString $ unLoc str
     apiProcCall CallOutputString [opPtr]
 
 codegenStatement I.NullStatement = return ()
@@ -301,7 +302,8 @@ codegenExpression (I.CallExpression name exps) = do
         SymbolVariable _ -> throwLocatedError AttemptToCallAVariable
         SymbolProcedure _ -> throwLocatedError AttemptToCallAProcedureAsFunction
         SymbolFunction rtype args -> do
-            op <- codegenFunCall (typeToLLVM rtype) fun args exps
+            argOps <- codegenArgs args exps
+            op <- callFun (typeToLLVM rtype) fun argOps []
             return (rtype, op)
 
 -- | Generate a division operation with division by zero check.
