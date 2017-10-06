@@ -1,5 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module IMP.Codegen
     ( LLVM
@@ -206,10 +208,12 @@ instance MonadLoc Codegen where
 sortBlocks :: [(Name, BlockState)] -> [(Name, BlockState)]
 sortBlocks = sortBy (compare `on` (idx . snd))
 
-createBlocks :: CodegenState -> LLVM [BasicBlock]
+type MonadCodegenError m = (MonadLoc m, MonadError (Located CodegenError) m)
+
+createBlocks :: MonadCodegenError m => CodegenState -> m [BasicBlock]
 createBlocks = traverse makeBlock . sortBlocks . Map.toList . blocks
 
-makeBlock :: (Name, BlockState) -> LLVM BasicBlock
+makeBlock :: MonadCodegenError m => (Name, BlockState) -> m BasicBlock
 makeBlock (l, BlockState _ s t) =
   case t of
     Just term -> return $ BasicBlock l (reverse s) term
