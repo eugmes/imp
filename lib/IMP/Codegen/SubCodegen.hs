@@ -3,7 +3,7 @@
 
 module IMP.Codegen.SubCodegen
     ( SubCodegen
-    , loopExitBlock
+    , getLoopExitBlock
     , execSubCodegen
     , addBlock
     , alloca
@@ -41,6 +41,7 @@ import qualified LLVM.AST.CallingConvention as CC
 import qualified Data.Map.Strict as Map
 import qualified LLVM.AST.FunctionAttribute as FA
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Monad.Except
 import Data.List
 import Data.Function
@@ -48,27 +49,30 @@ import Text.Printf
 
 type Names = Map.Map String Int
 
-data SubCodegenState = SubCodegenState
-                     { currentBlock :: Name
-                     -- |^ Name of the active block to append to
-                     , exitBlock :: Maybe Name
-                     -- |^ Block containing return
-                     , loopExitBlock :: Maybe Name
-                     -- |^ Exit block for innermost loop
-                     , subReturn :: Maybe (I.Type, Operand)
-                     -- |^ Subroutine return type and location
-                     , blocks :: Map.Map Name BlockState
-                     -- |^ Blocks of function
-                     , symtab :: SymbolTable
-                     -- |^ Function scope symbol table
-                     , blockCount :: Int
-                     -- |^ Count of basic blocks
-                     , count :: Word
-                     -- |^ Count of unnamed instructions
-                     , names :: Names
-                     -- |^ Name supply
-                     , location :: SourcePos
-                     } deriving Show
+data CodegenEnv = CodegenEnv
+                { location :: SourcePos
+                , loopExitBlock :: Maybe Name
+                -- |^ Exit block for innermost loop
+                } deriving Show
+
+data CodegenState = CodegenState
+                  { currentBlock :: Name
+                  -- |^ Name of the active block to append to
+                  , exitBlock :: Maybe Name
+                  -- |^ Block containing return
+                  , subReturn :: Maybe (I.Type, Operand)
+                  -- |^ Subroutine return type and location
+                  , blocks :: Map.Map Name BlockState
+                  -- |^ Blocks of function
+                  , symtab :: SymbolTable
+                  -- |^ Function scope symbol table
+                  , blockCount :: Int
+                  -- |^ Count of basic blocks
+                  , count :: Word
+                  -- |^ Count of unnamed instructions
+                  , names :: Names
+                  -- |^ Name supply
+                  } deriving Show
 
 data BlockState = BlockState
                 { idx :: Int
@@ -83,26 +87,21 @@ emptyBlock :: Int -> BlockState
 emptyBlock ix = BlockState ix [] Nothing
 
 newtype SubCodegen a = SubCodegen
-                     { runSubCodegen :: StateT SubCodegenState GlobalCodegen a
+                     { runSubCodegen :: ReaderT CodegenEnv (StateT CodegenState GlobalCodegen) a
                      } deriving ( Functor
                                 , Applicative
                                 , Monad
                                 , MonadError (Located CodegenError)
-                                , MonadState SubCodegenState
+                                , MonadReader CodegenEnv
+                                , MonadState CodegenState
                                 )
 
 instance MonadLoc SubCodegen where
-  withLoc f x = do
-    oldLoc <- gets location
-    modify $ \s -> s { location = getLoc x }
-    r <- f $ unLoc x
-    modify $ \s -> s { location = oldLoc }
-    return r
-
-  currentLoc = gets location
+  withLoc f x = local (\e -> e { location = getLoc x }) $ f $ unLoc x
+  currentLoc = reader location
 
 liftG :: GlobalCodegen a -> SubCodegen a
-liftG = SubCodegen . lift
+liftG = SubCodegen . lift . lift
 
 instance MonadCodegen SubCodegen where
   emitString = liftG . emitString
@@ -111,7 +110,7 @@ instance MonadCodegen SubCodegen where
 sortBlocks :: [(Name, BlockState)] -> [(Name, BlockState)]
 sortBlocks = sortBy (compare `on` (idx . snd))
 
-createBlocks :: MonadCodegen m => SubCodegenState -> m [BasicBlock]
+createBlocks :: MonadCodegen m => CodegenState -> m [BasicBlock]
 createBlocks = traverse makeBlock . sortBlocks . Map.toList . blocks
 
 makeBlock :: MonadCodegen m => (Name, BlockState) -> m BasicBlock
@@ -120,37 +119,38 @@ makeBlock (l, BlockState _ s t) =
     Just term -> return $ BasicBlock l (reverse s) term
     Nothing -> throwLocatedError $ InternalError $ printf "Block has no terminator: '%s'."  (show l)
 
-newSubCodegen :: SourcePos -> GlobalCodegen SubCodegenState
-newSubCodegen pos = do
+newCodegenState :: GlobalCodegen CodegenState
+newCodegenState = do
     syms <- getSymtab
 
-    return SubCodegenState
+    return CodegenState
                 { currentBlock = mkName ""
                 , exitBlock = Nothing
-                , loopExitBlock = Nothing
                 , subReturn = Nothing
                 , blocks = Map.empty
                 , symtab = Tab.newScope syms
                 , blockCount = 1
                 , count = 0
                 , names = Map.empty
+                }
+
+newCodegenEnv :: GlobalCodegen CodegenEnv
+newCodegenEnv = do
+  pos <- currentLoc
+  return CodegenEnv
+                { loopExitBlock = Nothing
                 , location = pos
                 }
 
 execSubCodegen :: SubCodegen a -> GlobalCodegen [BasicBlock]
 execSubCodegen m = do
-    pos <- currentLoc
-    cg <- newSubCodegen pos
-    s <- execStateT (runSubCodegen m) cg
-    createBlocks s
+    env <- newCodegenEnv
+    s <- newCodegenState
+    s' <- execStateT (runReaderT (runSubCodegen m) env) s
+    createBlocks s'
 
 withLoopExit :: Name -> SubCodegen a -> SubCodegen a
-withLoopExit newExitB m = do
-    oldExitB <- gets loopExitBlock
-    modify $ \s -> s { loopExitBlock = Just newExitB }
-    r <- m
-    modify $ \s -> s { loopExitBlock = oldExitB }
-    return r
+withLoopExit newExitB = local (\e -> e { loopExitBlock = Just newExitB })
 
 entry :: SubCodegen Name
 entry = gets currentBlock
@@ -304,3 +304,6 @@ apiProcCall c args = do
   where
     op = stdCallOp c
     attrs = stdCallAttrs c
+
+getLoopExitBlock :: SubCodegen (Maybe Name)
+getLoopExitBlock = reader loopExitBlock

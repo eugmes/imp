@@ -33,13 +33,14 @@ import qualified Data.Set as Set
 import LLVM.AST.DataLayout
 import LLVM.Prelude (ShortByteString)
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Monad.Except
 import Data.String
 import Data.Version
 import qualified Data.ByteString.UTF8 as U8
 import qualified Data.ByteString as B
 
-class (Monad m, MonadError (Located CodegenError) m, MonadLoc m) => MonadCodegen m where
+class (MonadError (Located CodegenError) m, MonadLoc m) => MonadCodegen m where
   emitString :: String -> m Operand
   useStdCall :: StandardCall -> m ()
 
@@ -49,47 +50,43 @@ data CodegenOptions = CodegenOptions
                     , targetTriple :: ShortByteString
                     } deriving Show
 
-data GlobalCodegenState = GlobalCodegenState
-               { currentModule :: AST.Module
-               , symtab :: SymbolTable
-               , nextStringNum :: Word
-               , usedCalls :: Set.Set StandardCall
-               , nextMetadataNum :: Word
-               , location :: SourcePos
-               } deriving Show
+newtype CodegenEnv = CodegenEnv
+                   { location :: SourcePos
+                   } deriving Show
+
+data CodegenState = CodegenState
+                  { currentModule :: AST.Module
+                  , symtab :: SymbolTable
+                  , nextStringNum :: Word
+                  , usedCalls :: Set.Set StandardCall
+                  , nextMetadataNum :: Word
+                  } deriving Show
 
 newtype GlobalCodegen a = GlobalCodegen
-                        { runGlobalCodegen :: StateT GlobalCodegenState (Except (Located CodegenError)) a
+                        { runGlobalCodegen :: ReaderT CodegenEnv (StateT CodegenState (Except (Located CodegenError))) a
                         } deriving ( Functor
                                    , Applicative
                                    , Monad
-                                   , MonadState GlobalCodegenState
+                                   , MonadReader CodegenEnv
+                                   , MonadState CodegenState
                                    , MonadError (Located CodegenError))
 
 instance MonadLoc GlobalCodegen where
-  withLoc f x = do
-    oldLoc <- gets location
-    modify $ \s -> s { location = getLoc x }
-    r <- f $ unLoc x
-    modify $ \s -> s { location = oldLoc }
-    return r
-
-  currentLoc = gets location
+  withLoc f x = local (\e -> e { location = getLoc x }) $ f $ unLoc x
+  currentLoc = reader location
 
 instance MonadCodegen GlobalCodegen where
   emitString = globalEmitString
   useStdCall = globalUseStdCall
 
-newGlobalCodegenState :: FilePath -> AST.Module -> GlobalCodegenState
-newGlobalCodegenState fileName m = GlobalCodegenState m Tab.empty 0 Set.empty 0 (initialPos fileName)
-
 execGlobalCodegen :: CodegenOptions -> GlobalCodegen a -> Either (Located CodegenError) AST.Module
 execGlobalCodegen opts m =
-  fmap currentModule $ runExcept $ execStateT (runGlobalCodegen m') s
+  fmap currentModule $ runExcept $ execStateT (runReaderT (runGlobalCodegen m') env) s
  where
   m' = m >> emitCompilerInfo
   md = emptyModule opts
-  s = newGlobalCodegenState (sourceFileName opts) md
+  s = CodegenState md Tab.empty 0 Set.empty 0
+  env = CodegenEnv { location = initialPos $ sourceFileName opts }
 
 emptyModule :: CodegenOptions -> AST.Module
 emptyModule opts =

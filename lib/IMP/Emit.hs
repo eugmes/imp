@@ -15,7 +15,7 @@ import qualified LLVM.AST as AST
 import LLVM.AST hiding (type')
 import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.IntegerPredicate as IP
-import Control.Monad.State
+import Control.Monad
 
 compileProgram :: CodegenOptions -> I.Program -> Either (Located CodegenError) AST.Module
 compileProgram opts = execGlobalCodegen opts . codegenProgram
@@ -215,7 +215,7 @@ codegenStatement (I.OutputStatement (I.Str str)) = do
 codegenStatement I.NullStatement = return ()
 
 codegenStatement I.BreakStatement = do
-    loopEx <- gets loopExitBlock
+    loopEx <- getLoopExitBlock
     case loopEx of
         Nothing -> throwLocatedError BreakOutsideOfLoop
         Just bname -> gotoBlock bname
