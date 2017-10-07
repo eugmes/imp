@@ -106,6 +106,14 @@ typeCheck :: I.Type -> I.Type -> SubCodegen ()
 typeCheck lt rt =
     when (lt /= rt) $ throwLocatedError $ TypeMismatch lt rt
 
+-- | Generate code and typecheck expression
+--
+-- Errors are emitted on expression location.
+typeCheckExpression :: I.Type -> Located I.Expression -> SubCodegen Operand
+typeCheckExpression t = withLoc (codegenExpression >=> check)
+ where
+  check (t', op) = typeCheck t t' >> return op
+
 maybeGenBlock :: String -> Name -> [Located I.Statement] -> SubCodegen Name
 maybeGenBlock _ contName [] = return contName
 
@@ -136,13 +144,7 @@ codegenArgs :: [I.Type] -> [Located I.Expression] -> SubCodegen [Operand]
 codegenArgs args exps = do
     when (length args /= length exps) $
         throwLocatedError InvalidNumberOfArguments
-    vals <- mapM genExp exps
-    mapM_ check $ zipLoc args vals
-    return $ map (snd . unLoc) vals
-  where
-    genExp exp@(Located l _) = Located l <$> withLoc codegenExpression exp
-    zipLoc = zipWith $ \t1 (Located l (t2, _)) -> Located l (t1, t2)
-    check = withLoc $ uncurry typeCheck
+    zipWithM typeCheckExpression args exps
 
 codegenStatement :: I.Statement -> SubCodegen ()
 
@@ -230,8 +232,7 @@ codegenStatement (I.ReturnValStatement exp) = do
     ex <- exit
     case ex of
         (bname, Just (retty, ptr)) -> do
-            (ty, op) <- withLoc codegenExpression exp
-            typeCheck retty ty
+            op <- typeCheckExpression retty exp
             store ptr op
             gotoBlock bname
         (_, Nothing) -> throwLocatedError NonVoidReturnInProcedure
