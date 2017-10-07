@@ -30,9 +30,9 @@ newScope (SymbolTable l) = SymbolTable $ Map.empty <| l
 -- of error an old value of the symbol is returned as @'Left'@.
 insert :: Ord k => k -> v -> SymbolTable k v -> Either v (SymbolTable k v)
 insert k v (SymbolTable (s :| ss)) =
-    case Map.lookup k s of
-        Nothing -> Right $ SymbolTable $ Map.insert k v s :| ss
-        Just v -> Left v
+  case Map.lookup k s of
+    Nothing -> Right $ SymbolTable $ Map.insert k v s :| ss
+    Just v -> Left v
 
 -- | Lookup value in symbol table.
 --

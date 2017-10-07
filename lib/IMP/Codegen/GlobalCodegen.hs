@@ -105,56 +105,56 @@ getSymtab = gets symtab
 -- TODO Insert location information into symbol table
 addSym :: SymbolType -> Type -> I.ID -> GlobalCodegen ()
 addSym st lt n = do
-    syms <- gets symtab
-    let sym = (st, ConstantOperand $ GlobalReference lt (mkName $ getID n))
-    case Tab.insert n sym syms of
-        Left _ -> throwLocatedError $ GlobalRedefinition n
-        Right syms' -> modify $ \s -> s { symtab = syms' }
+  syms <- gets symtab
+  let sym = (st, ConstantOperand $ GlobalReference lt (mkName $ getID n))
+  case Tab.insert n sym syms of
+    Left _ -> throwLocatedError $ GlobalRedefinition n
+    Right syms' -> modify $ \s -> s { symtab = syms' }
 
 -- | Add global definition
 addDefn :: Definition -> GlobalCodegen ()
 addDefn d = do
-    m <- gets currentModule
+  m <- gets currentModule
 
-    let defs = moduleDefinitions m
-    modify $ \s -> s { currentModule = m { moduleDefinitions = defs ++ [d] }}
+  let defs = moduleDefinitions m
+  modify $ \s -> s { currentModule = m { moduleDefinitions = defs ++ [d] }}
 
 -- | Declares function in global symbol table
 declareFun :: I.ID -> I.Type -> [I.Type] -> GlobalCodegen ()
 declareFun label retty argtys = addSym symt t label
-  where
-    symt = SymbolFunction retty argtys
-    t = ptr $ FunctionType (typeToLLVM retty) (map typeToLLVM argtys) False
+ where
+  symt = SymbolFunction retty argtys
+  t = ptr $ FunctionType (typeToLLVM retty) (map typeToLLVM argtys) False
 
 -- | Declares procedure in global symbol table
 declareProc :: I.ID -> [I.Type] -> GlobalCodegen ()
 declareProc label argtys = addSym symt t label
-  where
-    symt = SymbolProcedure argtys
-    t = ptr $ FunctionType VoidType (map typeToLLVM argtys) False
+ where
+  symt = SymbolProcedure argtys
+  t = ptr $ FunctionType VoidType (map typeToLLVM argtys) False
 
 -- | Adds global function definition
 defineSub :: I.ID -> Maybe I.Type -> [(I.Type, Located I.ID)] -> [BasicBlock] -> GlobalCodegen ()
 defineSub label retty argtys body = addDefn def
-  where
-    t = maybe VoidType typeToLLVM retty
-    def = GlobalDefinition $
-            functionDefaults { name = (mkName . getID) label
-                             , parameters = ([Parameter (typeToLLVM ty) ((mkName . getID . unLoc)  nm) []
-                                                     | (ty, nm) <- argtys], False)
-                             , returnType = t
-                             , basicBlocks = body
-                             }
+ where
+  t = maybe VoidType typeToLLVM retty
+  def = GlobalDefinition $
+          functionDefaults { name = (mkName . getID) label
+                           , parameters = ([Parameter (typeToLLVM ty) ((mkName . getID . unLoc)  nm) []
+                                                   | (ty, nm) <- argtys], False)
+                           , returnType = t
+                           , basicBlocks = body
+                           }
 
 -- | Add global variable definition
 --
 -- Also adds this variable to symbol table
 defineVar :: I.Type -> I.ID -> GlobalCodegen ()
 defineVar ty label = addSym (SymbolVariable ty) (ptr t) label >> addDefn def
-  where
-    n = mkName $ getID label
-    t = typeToLLVM ty
-    def = GlobalDefinition $ globalVariableDefaults { name = n, type' = t, initializer = Just $ Undef t }
+ where
+  n = mkName $ getID label
+  t = typeToLLVM ty
+  def = GlobalDefinition $ globalVariableDefaults { name = n, type' = t, initializer = Just $ Undef t }
 
 newStringName :: GlobalCodegen Name
 newStringName = do
@@ -195,17 +195,17 @@ globalUseStdCall c = do
 
 emitStdCallDecl :: StandardCall -> GlobalCodegen ()
 emitStdCallDecl c = addDefn d
-  where
-    retty = stdCallType c
-    n = stdCallName c
-    args = stdCallArgs c
-    attrs = Right <$> stdCallAttrs c
-    d = GlobalDefinition $
-        functionDefaults { name = n
-                         , parameters = ([Parameter ty "" [] | ty <- args], False)
-                         , returnType = retty
-                         , functionAttributes = attrs
-                         }
+ where
+  retty = stdCallType c
+  n = stdCallName c
+  args = stdCallArgs c
+  attrs = Right <$> stdCallAttrs c
+  d = GlobalDefinition $
+      functionDefaults { name = n
+                       , parameters = ([Parameter ty "" [] | ty <- args], False)
+                       , returnType = retty
+                       , functionAttributes = attrs
+                       }
 
 namedMetadata :: ShortByteString -> [MetadataNodeID] -> GlobalCodegen ()
 namedMetadata name ids = addDefn $ NamedMetadataDefinition name ids

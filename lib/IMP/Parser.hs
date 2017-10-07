@@ -46,8 +46,8 @@ decimal = lexeme' L.decimal
 
 stringLiteral :: Parser (Located String)
 stringLiteral = lexeme stringLiteral'
-  where
-    stringLiteral' = char '"' >> manyTill L.charLiteral (char '"')
+ where
+  stringLiteral' = char '"' >> manyTill L.charLiteral (char '"')
 
 rword :: T.Text -> Parser ()
 rword w = void $ lexeme' (string' w *> notFollowedBy alphaNumChar)
@@ -61,13 +61,13 @@ rws = [ "and", "begin", "boolean", "break", "call", "else", "end"
 
 idName :: Parser (Located String)
 idName = do
-    tok <- lookAhead p
-    check tok
-    lexeme p
-  where
-    p = (:) <$> letterChar <*> many alphaNumChar
-    check x = when (map toLower x `elem` rws) $
-                customFailure $ RWordAsIdentifier x
+  tok <- lookAhead p
+  check tok
+  lexeme p
+ where
+  p = (:) <$> letterChar <*> many alphaNumChar
+  check x = when (map toLower x `elem` rws) $
+              customFailure $ RWordAsIdentifier x
 
 comma, colon, semicolon, equals :: Parser ()
 comma = symbol' ","
@@ -132,34 +132,34 @@ subroutines = located subroutine `endBy` semicolon
 
 checkSubName :: Located ID -> Parser ()
 checkSubName name = do
-    endName <- unLoc <$> lookAhead identifier
-    when (unLoc name /= endName) $
-        customFailure $ EndMismatch name endName
-    void identifier
+  endName <- unLoc <$> lookAhead identifier
+  when (unLoc name /= endName) $
+    customFailure $ EndMismatch name endName
+  void identifier
 
 procedure :: Parser Subroutine
 procedure = do
-    rword "procedure"
-    name <- identifier
-    params <- parens paramLists
-    rword "is"
-    vars <- varDecs
-    body <- procBody
-    checkSubName name
-    return $ Procedure name params vars body
+  rword "procedure"
+  name <- identifier
+  params <- parens paramLists
+  rword "is"
+  vars <- varDecs
+  body <- procBody
+  checkSubName name
+  return $ Procedure name params vars body
 
 function :: Parser Subroutine
 function = do
-    rword "function"
-    name <- identifier
-    params <- parens paramLists
-    rword "return"
-    returnType <- typeName
-    rword "is"
-    vars <- varDecs
-    body <- procBody
-    checkSubName name
-    return $ Function name params returnType vars body
+  rword "function"
+  name <- identifier
+  params <- parens paramLists
+  rword "return"
+  returnType <- typeName
+  rword "is"
+  vars <- varDecs
+  body <- procBody
+  checkSubName name
+  return $ Function name params returnType vars body
 
 procBody :: Parser [Located Statement]
 procBody = between (rword "begin") (rword "end") statements

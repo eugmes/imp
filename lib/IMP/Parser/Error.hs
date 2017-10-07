@@ -12,9 +12,9 @@ data CustomError = EndMismatch (Located ID) ID
                  deriving (Eq, Ord)
 
 instance ShowErrorComponent CustomError where
-    -- TODO show location of subroutine head
-    showErrorComponent (EndMismatch name endName) =
-        printf "\"%s\" expected but \"%s\" found." (getID $ unLoc name)
+  -- TODO show location of subroutine head
+  showErrorComponent (EndMismatch name endName) =
+    printf "\"%s\" expected but \"%s\" found." (getID $ unLoc name)
                                                    (getID endName)
-    showErrorComponent (RWordAsIdentifier name) =
-        printf "Reserved word \"%s\" cannot be used as identifier." name
+  showErrorComponent (RWordAsIdentifier name) =
+    printf "Reserved word \"%s\" cannot be used as identifier." name

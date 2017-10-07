@@ -86,9 +86,9 @@ run o = do
       case lastStage o of
         ParseStage -> outputTree o tree
         _ -> genCode o text fileName tree `catch` \(VerifyException msg) -> do
-               putStrLn "Verification exception:"
-               putStrLn msg
-               exitFailure
+          putStrLn "Verification exception:"
+          putStrLn msg
+          exitFailure
 
 main :: IO ()
 main = execParser opts >>= run

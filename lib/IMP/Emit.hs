@@ -22,74 +22,74 @@ compileProgram opts = execGlobalCodegen opts . codegenProgram
 
 codegenProgram :: I.Program -> GlobalCodegen ()
 codegenProgram (I.Program vars subs) = do
-    mapM_ (withLoc codegenVars) vars
-    mapM_ (withLoc codegenSubDecl) subs
-    mapM_ (withLoc codegenSub) subs
+  mapM_ (withLoc codegenVars) vars
+  mapM_ (withLoc codegenSubDecl) subs
+  mapM_ (withLoc codegenSub) subs
 
 codegenVars :: I.VarDec -> GlobalCodegen ()
 codegenVars (I.VarDec names t) = mapM_ (withLoc $ defineVar $ unLoc t) names
 
 toSig :: [Located I.ParamList] -> [(I.Type, Located I.ID)]
 toSig = concatMap (toSig' . unLoc)
-  where
-    toSig' (I.ParamList ids ty) = map (toSig'' $ unLoc ty) ids
-    toSig'' t name = (t, name)
+ where
+  toSig' (I.ParamList ids ty) = map (toSig'' $ unLoc ty) ids
+  toSig'' t name = (t, name)
 
 paramTypes :: [Located I.ParamList] -> [I.Type]
 paramTypes = fmap fst . toSig
 
 codegenSubDecl :: I.Subroutine -> GlobalCodegen ()
 codegenSubDecl (I.Procedure name params _ _) =
-    withLoc (`declareProc` ts) name
-  where
-    ts = paramTypes params
+  withLoc (`declareProc` ts) name
+ where
+  ts = paramTypes params
 
 codegenSubDecl (I.Function name params retty _ _) =
-    withLoc (\n -> declareFun n (unLoc retty) ts) name
-  where
-    ts = paramTypes params
+  withLoc (\n -> declareFun n (unLoc retty) ts) name
+ where
+  ts = paramTypes params
 
 codegenSub' :: Located I.ID -> Maybe I.Type -> [Located I.ParamList] -> [Located I.VarDec] -> [Located I.Statement] -> GlobalCodegen ()
 codegenSub' name retty params vars body = do
-    blocks <- execSubCodegen cg
-    defineSub (unLoc name) retty args blocks
-  where
-    args = toSig params
-    cg = do
-        entry <- addBlock "entry"
-        exit <- addBlock "exit"
-        setBlock entry
-        retval <- case retty of
-                      Nothing -> return Nothing
-                      Just t -> do
-                        op <- alloca ".return" $ typeToLLVM t
-                        return $ Just (t, op)
+  blocks <- execSubCodegen cg
+  defineSub (unLoc name) retty args blocks
+ where
+  args = toSig params
+  cg = do
+    entry <- addBlock "entry"
+    exit <- addBlock "exit"
+    setBlock entry
+    retval <- case retty of
+                Nothing -> return Nothing
+                Just t -> do
+                  op <- alloca ".return" $ typeToLLVM t
+                  return $ Just (t, op)
 
-        setExitBlock retval exit
+    setExitBlock retval exit
 
-        forM_ args $ \(ty, a) -> do
-            let t = typeToLLVM ty
-            var <- alloca (getID (unLoc a) ++ ".addr") t
-            store var $ LocalReference t $ mkName $ getID $ unLoc a
-            withLoc (\n -> defineLocalVar n ty var) a
-        codegenLocals vars
-        mapM_ (withLoc codegenStatement) body
-        br exit
+    forM_ args $ \(ty, a) -> do
+      let t = typeToLLVM ty
+      var <- alloca (getID (unLoc a) ++ ".addr") t
+      store var $ LocalReference t $ mkName $ getID $ unLoc a
+      withLoc (\n -> defineLocalVar n ty var) a
+      codegenLocals vars
+      mapM_ (withLoc codegenStatement) body
+      br exit
 
-        setBlock exit
-        case retval of
-            Nothing -> ret Nothing
-            Just (ty, op) -> load (typeToLLVM ty) op >>= ret . Just
+      setBlock exit
+      case retval of
+        Nothing -> ret Nothing
+        Just (ty, op) -> load (typeToLLVM ty) op >>= ret . Just
 
 codegenSub :: I.Subroutine -> GlobalCodegen ()
 codegenSub (I.Procedure name params vars body) = do
-    when ((unLoc name == I.ID "main") && not (null params)) $
-        throwLocatedError MainHasArguments
-    codegenSub' name Nothing params vars body
+  when ((unLoc name == I.ID "main") && not (null params)) $
+    throwLocatedError MainHasArguments
+  codegenSub' name Nothing params vars body
 
 codegenSub (I.Function name params retty vars body) = do
-    when (unLoc name == I.ID "main") $ throwLocatedError MainIsAFunction
-    codegenSub' name (Just $ unLoc retty) params vars body
+  when (unLoc name == I.ID "main") $ throwLocatedError MainIsAFunction
+  codegenSub' name (Just $ unLoc retty) params vars body
 
 codegenLocals :: [Located I.VarDec] -> SubCodegen ()
 codegenLocals = mapM_ $ withLoc codegenLocals'
@@ -99,12 +99,12 @@ codegenLocals' (I.VarDec names ty) = mapM_ (withLoc $ \n -> codegenLocal n $ unL
 
 codegenLocal :: I.ID -> I.Type -> SubCodegen ()
 codegenLocal name ty = do
-    var <- alloca (getID name) $ typeToLLVM ty
-    defineLocalVar name ty var
+  var <- alloca (getID name) $ typeToLLVM ty
+  defineLocalVar name ty var
 
 typeCheck :: I.Type -> I.Type -> SubCodegen ()
 typeCheck lt rt =
-    when (lt /= rt) $ throwLocatedError $ TypeMismatch lt rt
+  when (lt /= rt) $ throwLocatedError $ TypeMismatch lt rt
 
 -- | Generate code and typecheck expression
 --
@@ -118,14 +118,14 @@ maybeGenBlock :: String -> Name -> [Located I.Statement] -> SubCodegen Name
 maybeGenBlock _ contName [] = return contName
 
 maybeGenBlock newTemlate contName stmts = do
-    e <- entry
-    newName <- addBlock newTemlate
-    setBlock newName
-    mapM_ (withLoc codegenStatement) stmts
-    br contName
+  e <- entry
+  newName <- addBlock newTemlate
+  setBlock newName
+  mapM_ (withLoc codegenStatement) stmts
+  br contName
 
-    setBlock e
-    return newName
+  setBlock e
+  return newName
 
 -- | Uncoditionally transfer execution to another block
 --
@@ -133,184 +133,184 @@ maybeGenBlock newTemlate contName stmts = do
 -- block will be discarded
 gotoBlock :: Name -> SubCodegen ()
 gotoBlock bname = do
-    br bname
-    cont <- addBlock "discard"
-    setBlock cont
+  br bname
+  cont <- addBlock "discard"
+  setBlock cont
 
 -- | Generate and typecheck subroutine arguments
 --
 -- Errors are reported at location of argument that have caused that error.
 codegenArgs :: [I.Type] -> [Located I.Expression] -> SubCodegen [Operand]
 codegenArgs args exps = do
-    when (length args /= length exps) $
-        throwLocatedError InvalidNumberOfArguments
-    zipWithM typeCheckExpression args exps
+  when (length args /= length exps) $
+    throwLocatedError InvalidNumberOfArguments
+  zipWithM typeCheckExpression args exps
 
 codegenStatement :: I.Statement -> SubCodegen ()
 
 codegenStatement (I.IfStatement cond ifTrue ifFalse) = do
-    op <- withLoc (codegenExpression >=> check) cond
-    ifExitB <- addBlock "if.exit"
-    ifTrueB <- maybeGenBlock "if.true" ifExitB ifTrue
-    ifFalseB <- maybeGenBlock "if.false" ifExitB ifFalse
+  op <- withLoc (codegenExpression >=> check) cond
+  ifExitB <- addBlock "if.exit"
+  ifTrueB <- maybeGenBlock "if.true" ifExitB ifTrue
+  ifFalseB <- maybeGenBlock "if.false" ifExitB ifFalse
 
-    cbr op ifTrueB ifFalseB
+  cbr op ifTrueB ifFalseB
 
-    setBlock ifExitB
-  where
-    check = checkBoolean NonBooleanIfCondition
+  setBlock ifExitB
+ where
+  check = checkBoolean NonBooleanIfCondition
 
 codegenStatement (I.WhileStatement cond body) = do
-    whileCondB <- addBlock "while.cond"
-    whileExitB <- addBlock "while.exit"
-    br whileCondB
+  whileCondB <- addBlock "while.cond"
+  whileExitB <- addBlock "while.exit"
+  br whileCondB
 
-    setBlock whileCondB
+  setBlock whileCondB
 
-    op <- withLoc (codegenExpression >=> check) cond
-    whileLoopB <- withLoopExit whileExitB $ maybeGenBlock "while.loop" whileCondB body
-    cbr op whileLoopB whileExitB
+  op <- withLoc (codegenExpression >=> check) cond
+  whileLoopB <- withLoopExit whileExitB $ maybeGenBlock "while.loop" whileCondB body
+  cbr op whileLoopB whileExitB
 
-    setBlock whileExitB
-  where
-    check = checkBoolean NonBooleanWhileCondition
+  setBlock whileExitB
+ where
+   check = checkBoolean NonBooleanWhileCondition
 
 codegenStatement (I.AssignStatement name exp) = do
-    (varSymType, varPtr) <- withLoc getVar name
-    varType <- case varSymType of
-        SymbolVariable ty -> return ty
-        _ -> throwLocatedError $ NotAVariable $ unLoc name
-    (expType, op) <- withLoc codegenExpression exp
-    typeCheck varType expType
-    store varPtr op
+  (varSymType, varPtr) <- withLoc getVar name
+  varType <- case varSymType of
+    SymbolVariable ty -> return ty
+    _ -> throwLocatedError $ NotAVariable $ unLoc name
+  (expType, op) <- withLoc codegenExpression exp
+  typeCheck varType expType
+  store varPtr op
 
 codegenStatement (I.CallStatement name exps) = do
-    (ty, proc) <- withLoc getVar name
-    case ty of
-        SymbolVariable _ -> throwLocatedError AttemptToCallAVariable
-        SymbolFunction _ _ -> throwLocatedError AttemptToCallAFunctionAsProcedure
-        SymbolProcedure args -> do
-          argOps <- codegenArgs args exps
-          callProc proc argOps []
+  (ty, proc) <- withLoc getVar name
+  case ty of
+    SymbolVariable _ -> throwLocatedError AttemptToCallAVariable
+    SymbolFunction _ _ -> throwLocatedError AttemptToCallAFunctionAsProcedure
+    SymbolProcedure args -> do
+      argOps <- codegenArgs args exps
+      callProc proc argOps []
 
 codegenStatement (I.InputStatement name) = do
-    (ty, ptr) <- withLoc getVar name
-    case ty of
-        SymbolVariable t -> do
-            op <- case t of
-                I.IntegerType -> apiFunCall CallInputInteger []
-                _ -> throwLocatedError InputError
-            store ptr op
+  (ty, ptr) <- withLoc getVar name
+  case ty of
+    SymbolVariable t -> do
+      op <- case t of
+        I.IntegerType -> apiFunCall CallInputInteger []
         _ -> throwLocatedError InputError
+      store ptr op
+    _ -> throwLocatedError InputError
 
 codegenStatement (I.OutputStatement (I.Exp exp)) = do
-    (ty, op) <- withLoc codegenExpression exp
-    let api = case ty of
-              I.IntegerType -> CallOutputInteger
-              I.BooleanType -> CallOutputBoolean
-    apiProcCall api [op]
+  (ty, op) <- withLoc codegenExpression exp
+  let api = case ty of
+            I.IntegerType -> CallOutputInteger
+            I.BooleanType -> CallOutputBoolean
+  apiProcCall api [op]
 
 codegenStatement (I.OutputStatement (I.Str str)) = do
-    opPtr <- emitString $ unLoc str
-    apiProcCall CallOutputString [opPtr]
+  opPtr <- emitString $ unLoc str
+  apiProcCall CallOutputString [opPtr]
 
 codegenStatement I.NullStatement = return ()
 
 codegenStatement I.BreakStatement = do
-    loopEx <- getLoopExitBlock
-    case loopEx of
-        Nothing -> throwLocatedError BreakOutsideOfLoop
-        Just bname -> gotoBlock bname
+  loopEx <- getLoopExitBlock
+  case loopEx of
+    Nothing -> throwLocatedError BreakOutsideOfLoop
+    Just bname -> gotoBlock bname
 
 codegenStatement I.ReturnStatement = do
-    ex <- exit
-    case ex of
-        (_, Just _) -> throwLocatedError VoidReturnInFunction
-        (bname, Nothing) -> gotoBlock bname
+  ex <- exit
+  case ex of
+    (_, Just _) -> throwLocatedError VoidReturnInFunction
+    (bname, Nothing) -> gotoBlock bname
 
 codegenStatement (I.ReturnValStatement exp) = do
-    ex <- exit
-    case ex of
-        (bname, Just (retty, ptr)) -> do
-            op <- typeCheckExpression retty exp
-            store ptr op
-            gotoBlock bname
-        (_, Nothing) -> throwLocatedError NonVoidReturnInProcedure
+  ex <- exit
+  case ex of
+    (bname, Just (retty, ptr)) -> do
+      op <- typeCheckExpression retty exp
+      store ptr op
+      gotoBlock bname
+    (_, Nothing) -> throwLocatedError NonVoidReturnInProcedure
 
 codegenStatement I.HaltStatement = apiProcCall CallHalt []
 codegenStatement I.NewlineStatement = apiProcCall CallNewline []
 
 codegenExpression :: I.Expression -> SubCodegen (I.Type, Operand)
 codegenExpression (I.UnOpExp unaryOp expr) = do
-    (ty, fOp) <- withLoc codegenExpression expr
-    case (unaryOp, ty) of
-        (I.OpNot, I.BooleanType) -> do
-            op <- notInstr fOp
-            return (ty, op)
-        (I.OpNeg, I.IntegerType) ->
-            genArithCall ty CallSSubWithOverflow (constZero $ typeToLLVM ty) fOp
-        _ -> throwLocatedError $ UnaryOpTypeMismatch unaryOp ty
+  (ty, fOp) <- withLoc codegenExpression expr
+  case (unaryOp, ty) of
+    (I.OpNot, I.BooleanType) -> do
+      op <- notInstr fOp
+      return (ty, op)
+    (I.OpNeg, I.IntegerType) ->
+      genArithCall ty CallSSubWithOverflow (constZero $ typeToLLVM ty) fOp
+    _ -> throwLocatedError $ UnaryOpTypeMismatch unaryOp ty
 
 codegenExpression (I.BinOpExp leftExp binaryOp rightExp) = do
-    (leftType, leftOp) <- withLoc codegenExpression leftExp
-    (rightType, rightOp) <- withLoc codegenExpression rightExp
-    typeCheck leftType rightType
+  (leftType, leftOp) <- withLoc codegenExpression leftExp
+  (rightType, rightOp) <- withLoc codegenExpression rightExp
+  typeCheck leftType rightType
 
-    let fn = case (binaryOp, leftType) of
-               (I.OpEQ, _) -> icmp IP.EQ
-               (I.OpLT, I.IntegerType) -> icmp IP.SLT
-               (I.OpLE, I.IntegerType) -> icmp IP.SLE
-               (I.OpGT, I.IntegerType) -> icmp IP.SGT
-               (I.OpGE, I.IntegerType) -> icmp IP.SLE
-               (I.OpNE, _) -> icmp IP.NE
-               (I.OpAdd, I.IntegerType) -> genArithCall leftType CallSAddWithOverflow
-               (I.OpSub, I.IntegerType) -> genArithCall leftType CallSSubWithOverflow
-               (I.OpOr, I.BooleanType) -> or
-               (I.OpMul, I.IntegerType) -> genArithCall leftType CallSMulWithOverflow
-               (I.OpDiv, I.IntegerType) -> genDivOp leftType sdiv
-               (I.OpMod, I.IntegerType) -> genDivOp leftType srem
-               (I.OpAnd, I.BooleanType) -> and
-               _ -> \_ _ -> throwLocatedError $ BinaryOpTypeMismatch binaryOp leftType
+  let fn = case (binaryOp, leftType) of
+           (I.OpEQ, _) -> icmp IP.EQ
+           (I.OpLT, I.IntegerType) -> icmp IP.SLT
+           (I.OpLE, I.IntegerType) -> icmp IP.SLE
+           (I.OpGT, I.IntegerType) -> icmp IP.SGT
+           (I.OpGE, I.IntegerType) -> icmp IP.SLE
+           (I.OpNE, _) -> icmp IP.NE
+           (I.OpAdd, I.IntegerType) -> genArithCall leftType CallSAddWithOverflow
+           (I.OpSub, I.IntegerType) -> genArithCall leftType CallSSubWithOverflow
+           (I.OpOr, I.BooleanType) -> or
+           (I.OpMul, I.IntegerType) -> genArithCall leftType CallSMulWithOverflow
+           (I.OpDiv, I.IntegerType) -> genDivOp leftType sdiv
+           (I.OpMod, I.IntegerType) -> genDivOp leftType srem
+           (I.OpAnd, I.BooleanType) -> and
+           _ -> \_ _ -> throwLocatedError $ BinaryOpTypeMismatch binaryOp leftType
 
-    fn leftOp rightOp
-  where
-    wrap ty f op0 op1 = do
-        op <- instr (typeToLLVM ty) $ f op0 op1 []
-        return (ty, op)
+  fn leftOp rightOp
+ where
+  wrap ty f op0 op1 = do
+    op <- instr (typeToLLVM ty) $ f op0 op1 []
+    return (ty, op)
 
-    icmp pred = wrap I.BooleanType (AST.ICmp pred)
-    or = wrap I.BooleanType AST.Or
-    sdiv = wrap I.IntegerType $ AST.SDiv False
-    srem = wrap I.IntegerType AST.SRem
-    and = wrap I.BooleanType AST.And
+  icmp pred = wrap I.BooleanType (AST.ICmp pred)
+  or = wrap I.BooleanType AST.Or
+  sdiv = wrap I.IntegerType $ AST.SDiv False
+  srem = wrap I.IntegerType AST.SRem
+  and = wrap I.BooleanType AST.And
 
 codegenExpression (I.NumberExpression (I.Number num)) =
-    return (I.IntegerType, op)
-  where
-    op = ConstantOperand $ C.Int (typeBits integer) num
+  return (I.IntegerType, op)
+ where
+  op = ConstantOperand $ C.Int (typeBits integer) num
 
 codegenExpression (I.BoolExpression val) =
-    return (I.BooleanType, op)
-  where
-    op = if val then constTrue else constFalse
+  return (I.BooleanType, op)
+ where
+  op = if val then constTrue else constFalse
 
 codegenExpression (I.IdExpression name) = do
-    (ty, ptr) <- withLoc getVar name
-    case ty of
-        SymbolVariable t -> do
-            op <- load (typeToLLVM t) ptr
-            return (t, op)
-        _ -> throwLocatedError AttemptToReadSubroutine
+  (ty, ptr) <- withLoc getVar name
+  case ty of
+    SymbolVariable t -> do
+      op <- load (typeToLLVM t) ptr
+      return (t, op)
+    _ -> throwLocatedError AttemptToReadSubroutine
 
 codegenExpression (I.CallExpression name exps) = do
-    (ty, fun) <- withLoc getVar name
-    case ty of
-        SymbolVariable _ -> throwLocatedError AttemptToCallAVariable
-        SymbolProcedure _ -> throwLocatedError AttemptToCallAProcedureAsFunction
-        SymbolFunction rtype args -> do
-            argOps <- codegenArgs args exps
-            op <- callFun (typeToLLVM rtype) fun argOps []
-            return (rtype, op)
+  (ty, fun) <- withLoc getVar name
+  case ty of
+    SymbolVariable _ -> throwLocatedError AttemptToCallAVariable
+    SymbolProcedure _ -> throwLocatedError AttemptToCallAProcedureAsFunction
+    SymbolFunction rtype args -> do
+      argOps <- codegenArgs args exps
+      op <- callFun (typeToLLVM rtype) fun argOps []
+      return (rtype, op)
 
 -- | Generate a division operation with division by zero check.
 --

@@ -121,18 +121,18 @@ makeBlock (l, BlockState _ s t) =
 
 newCodegenState :: GlobalCodegen CodegenState
 newCodegenState = do
-    syms <- getSymtab
+  syms <- getSymtab
 
-    return CodegenState
-                { currentBlock = mkName ""
-                , exitBlock = Nothing
-                , subReturn = Nothing
-                , blocks = Map.empty
-                , symtab = Tab.newScope syms
-                , blockCount = 1
-                , count = 0
-                , names = Map.empty
-                }
+  return CodegenState
+              { currentBlock = mkName ""
+              , exitBlock = Nothing
+              , subReturn = Nothing
+              , blocks = Map.empty
+              , symtab = Tab.newScope syms
+              , blockCount = 1
+              , count = 0
+              , names = Map.empty
+              }
 
 newCodegenEnv :: GlobalCodegen CodegenEnv
 newCodegenEnv = do
@@ -144,10 +144,10 @@ newCodegenEnv = do
 
 execSubCodegen :: SubCodegen a -> GlobalCodegen [BasicBlock]
 execSubCodegen m = do
-    env <- newCodegenEnv
-    s <- newCodegenState
-    s' <- execStateT (runReaderT (runSubCodegen m) env) s
-    createBlocks s'
+  env <- newCodegenEnv
+  s <- newCodegenState
+  s' <- execStateT (runReaderT (runSubCodegen m) env) s
+  createBlocks s'
 
 withLoopExit :: Name -> SubCodegen a -> SubCodegen a
 withLoopExit newExitB = local (\e -> e { loopExitBlock = Just newExitB })
@@ -157,90 +157,90 @@ entry = gets currentBlock
 
 exit :: SubCodegen (Name, Maybe (I.Type, Operand))
 exit = do
-    b <- gets exitBlock
-    case b of
-        Just bname -> do
-            t <- gets subReturn
-            return (bname, t)
-        Nothing -> throwLocatedError $ InternalError "Exit block was not set."
+  b <- gets exitBlock
+  case b of
+    Just bname -> do
+      t <- gets subReturn
+      return (bname, t)
+    Nothing -> throwLocatedError $ InternalError "Exit block was not set."
 
 addBlock :: String -> SubCodegen Name
 addBlock bname = do
-    bls <- gets blocks
-    ix <- gets blockCount
-    nms <- gets names
+  bls <- gets blocks
+  ix <- gets blockCount
+  nms <- gets names
 
-    let new = emptyBlock ix
-        (qname, supply) = uniqueName bname nms
+  let new = emptyBlock ix
+      (qname, supply) = uniqueName bname nms
 
-    modify $ \s -> s { blocks = Map.insert (mkName qname) new bls
-                     , blockCount = ix + 1
-                     , names = supply
-                     }
-    return $ mkName qname
+  modify $ \s -> s { blocks = Map.insert (mkName qname) new bls
+                   , blockCount = ix + 1
+                   , names = supply
+                   }
+  return $ mkName qname
 
 setBlock :: Name -> SubCodegen ()
 setBlock bname = modify $ \s -> s { currentBlock = bname }
 
 setExitBlock :: Maybe (I.Type, Operand) -> Name -> SubCodegen ()
 setExitBlock ty bname =
-    modify $ \s -> s { subReturn = ty, exitBlock = Just bname }
+  modify $ \s -> s { subReturn = ty, exitBlock = Just bname }
 
 modifyBlock :: BlockState -> SubCodegen ()
 modifyBlock new = do
-    active <- gets currentBlock
-    modify $ \s -> s { blocks = Map.insert active new (blocks s) }
+  active <- gets currentBlock
+  modify $ \s -> s { blocks = Map.insert active new (blocks s) }
 
 current :: SubCodegen BlockState
 current = do
-    c <- gets currentBlock
-    blks <- gets blocks
-    case Map.lookup c blks of
-        Just x -> return x
-        Nothing -> throwLocatedError $ InternalError $ printf "No such block: '%s'" (show c)
+  c <- gets currentBlock
+  blks <- gets blocks
+  case Map.lookup c blks of
+    Just x -> return x
+    Nothing -> throwLocatedError $ InternalError $ printf "No such block: '%s'" (show c)
 
 fresh :: SubCodegen Word
 fresh = do
-    i <- gets count
-    modify $ \s -> s { count = i + 1 }
-    return $ i + 1
+  i <- gets count
+  modify $ \s -> s { count = i + 1 }
+  return $ i + 1
 
 uniqueName :: String -> Names -> (String, Names)
 uniqueName nm ns =
-    case Map.lookup nm ns of
-        Nothing -> (nm, Map.insert nm 1 ns)
-        Just ix -> (nm ++ show ix, Map.insert nm (ix + 1) ns)
+  case Map.lookup nm ns of
+    Nothing -> (nm, Map.insert nm 1 ns)
+    Just ix -> (nm ++ show ix, Map.insert nm (ix + 1) ns)
 
 defineLocalVar :: I.ID -> I.Type -> Operand -> SubCodegen ()
 defineLocalVar name ty x = do
-    syms <- gets symtab
-    case Tab.insert name (SymbolVariable ty, x) syms of
-        Left _ ->
-            throwLocatedError $ LocalRedefinition name
-        Right syms' ->
-            modify $ \s -> s { symtab = syms' }
+  syms <- gets symtab
+  case Tab.insert name (SymbolVariable ty, x) syms of
+    Left _ ->
+      throwLocatedError $ LocalRedefinition name
+    Right syms' ->
+      modify $ \s -> s { symtab = syms' }
 
 getVar :: I.ID -> SubCodegen (SymbolType, Operand)
 getVar var = do
-    syms <- gets symtab
-    case Tab.lookup var syms of
-        Just x -> return x
-        Nothing -> throwLocatedError $ SymbolNotInScope var
+  syms <- gets symtab
+  case Tab.lookup var syms of
+    Just x -> return x
+    Nothing -> throwLocatedError $ SymbolNotInScope var
 
 instr :: Type -> Instruction -> SubCodegen Operand
 instr ty ins = do
-    ref <- UnName <$> fresh
-    namedInstr ref ty ins
+  ref <- UnName <$> fresh
+  namedInstr ref ty ins
 
 instr' :: String -> Type -> Instruction -> SubCodegen Operand
 instr' n = namedInstr (mkName n)
 
 namedInstr :: Name -> Type -> Instruction -> SubCodegen Operand
 namedInstr ref ty ins = do
-    blk <- current
-    let i = stack blk
-    modifyBlock (blk { stack = (ref := ins) : i})
-    return $ LocalReference ty ref
+  blk <- current
+  let i = stack blk
+  modifyBlock (blk { stack = (ref := ins) : i})
+  return $ LocalReference ty ref
 
 voidInstr :: Instruction -> SubCodegen ()
 voidInstr ins = do
@@ -253,28 +253,28 @@ alloca n ty = instr' n ty $ Alloca ty Nothing 0 []
 
 store :: Operand -> Operand -> SubCodegen ()
 store ptr val =
-    voidInstr $ Store False ptr val Nothing 0 []
+  voidInstr $ Store False ptr val Nothing 0 []
 
 notInstr :: Operand -> SubCodegen Operand
 notInstr op =
-    instr boolean $ AST.Xor constTrue op []
+  instr boolean $ AST.Xor constTrue op []
 
 load :: Type -> Operand -> SubCodegen Operand
 load ty ptr =
-    instr ty $ Load False ptr Nothing 0 []
+  instr ty $ Load False ptr Nothing 0 []
 
 callFun :: Type -> Operand -> [Operand] -> [FA.FunctionAttribute] -> SubCodegen Operand
 callFun retty fun args attrs =
-    instr retty $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
+  instr retty $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
 
 callProc :: Operand -> [Operand] -> [FA.FunctionAttribute] -> SubCodegen ()
 callProc fun args attrs =
-    voidInstr $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
+  voidInstr $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
 
 terminator :: Named Terminator -> SubCodegen ()
 terminator trm = do
-    blk <- current
-    modifyBlock (blk { term = Just trm })
+  blk <- current
+  modifyBlock (blk { term = Just trm })
 
 br :: Name -> SubCodegen ()
 br val = terminator $ Do $ Br val []
@@ -290,20 +290,20 @@ unreachable = terminator $ Do $ Unreachable []
 
 apiFunCall :: StandardCall -> [Operand] -> SubCodegen Operand
 apiFunCall c args = do
-    useStdCall c
-    callFun retty op args attrs
-  where
-    retty = stdCallType c
-    op = stdCallOp c
-    attrs = stdCallAttrs c
+  useStdCall c
+  callFun retty op args attrs
+ where
+  retty = stdCallType c
+  op = stdCallOp c
+  attrs = stdCallAttrs c
 
 apiProcCall :: StandardCall -> [Operand] -> SubCodegen ()
 apiProcCall c args = do
-    useStdCall c
-    callProc op args attrs
-  where
-    op = stdCallOp c
-    attrs = stdCallAttrs c
+  useStdCall c
+  callProc op args attrs
+ where
+  op = stdCallOp c
+  attrs = stdCallAttrs c
 
 getLoopExitBlock :: SubCodegen (Maybe Name)
 getLoopExitBlock = reader loopExitBlock
