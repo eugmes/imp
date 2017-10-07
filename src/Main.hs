@@ -25,7 +25,7 @@ import Control.Exception
 import Control.Monad
 
 data UseColor = NoColor | UseColor deriving Show
-data Stage = ParseStage | CompileStage deriving (Show, Ord, Eq, Enum, Bounded)
+data Stage = ParseStage | CompileStage | TargetAsmStage deriving (Show, Ord, Eq, Enum, Bounded)
 
 data Options = Options
   { inputFile :: FilePath
@@ -39,7 +39,9 @@ options :: Opt.Parser Options
 options = Options
   <$> strArgument (metavar "FILE" <> help "Source file name")
   <*> flag NoColor UseColor (short 'C' <> long "color" <> help "Enable color output")
-  <*> flag CompileStage ParseStage (long "parse-only" <> help "Stop after parsing and dump the parse tree")
+  <*> ( flag' ParseStage (long "parse-only" <> help "Stop after parsing and dump the parse tree")
+    <|> flag' TargetAsmStage (short 'S' <> help "Emit target assembly")
+    <|> pure CompileStage )
   <*> optional (option str (short 'o' <> metavar "FILE" <> help "Redirect output to FILE"))
   <*> optional (option auto (short 'O' <> metavar "LEVEL" <> help "Set optimization level"))
 
@@ -60,7 +62,10 @@ genCode o text name pgm =
             verify m
             withPassManager passes $ \pm -> do
               void $ runPassManager pm m
-              llstr <- moduleLLVMAssembly m
+              llstr <- case lastStage o of
+                         CompileStage -> moduleLLVMAssembly m
+                         TargetAsmStage -> moduleTargetAssembly target m
+                         _ -> error "Unexpected stage"
               outputAssembly llstr
  where
   outputAssembly = maybe C.putStr C.writeFile $ outputFile o
