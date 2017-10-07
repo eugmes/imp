@@ -72,14 +72,14 @@ codegenSub' name retty params vars body = do
       var <- alloca (getID (unLoc a) ++ ".addr") t
       store var $ LocalReference t $ mkName $ getID $ unLoc a
       withLoc (\n -> defineLocalVar n ty var) a
-      codegenLocals vars
-      mapM_ (withLoc codegenStatement) body
-      br exit
+    codegenLocals vars
+    mapM_ (withLoc codegenStatement) body
+    br exit
 
-      setBlock exit
-      case retval of
-        Nothing -> ret Nothing
-        Just (ty, op) -> load (typeToLLVM ty) op >>= ret . Just
+    setBlock exit
+    case retval of
+      Nothing -> ret Nothing
+      Just (ty, op) -> load (typeToLLVM ty) op >>= ret . Just
 
 codegenSub :: I.Subroutine -> GlobalCodegen ()
 codegenSub (I.Procedure name params vars body) = do
