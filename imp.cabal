@@ -57,4 +57,5 @@ executable impc
                      , llvm-hs
                      , bytestring
                      , optparse-applicative
+                     , containers
   default-language:    Haskell2010
