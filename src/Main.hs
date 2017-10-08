@@ -22,6 +22,7 @@ import qualified LLVM.Target.Options as TO
 import qualified LLVM.CodeModel as CodeModel
 import qualified LLVM.CodeGenOpt as CodeGenOpt
 import qualified Data.ByteString.Char8 as C
+import LLVM.CommandLine
 import Options.Applicative as Opt
 import Data.Semigroup ((<>))
 import System.Exit
@@ -29,6 +30,7 @@ import Control.Exception
 import Control.Monad
 import Data.String
 import qualified Data.Map as Map
+import System.Environment (getProgName)
 
 data UseColor = NoColor | UseColor deriving Show
 data Stage = ParseStage | CompileStage | TargetAsmStage deriving (Show, Ord, Eq, Enum, Bounded)
@@ -40,6 +42,7 @@ data Options = Options
   , outputFile :: Maybe FilePath
   , optimizationLevel :: Maybe Word
   , triple :: Maybe String
+  , llvmOptions :: [String]
   } deriving Show
 
 options :: Opt.Parser Options
@@ -52,6 +55,7 @@ options = Options
   <*> optional (option str (short 'o' <> metavar "FILE" <> help "Redirect output to FILE"))
   <*> optional (option auto (short 'O' <> metavar "LEVEL" <> help "Set optimization level"))
   <*> optional (option str (long "triple" <> metavar "TRIPLE" <> help "Target triple for code generation"))
+  <*> many (option str (long "llvm" <> metavar "OPTION" <> help "Additional options to pass to LLVM"))
 
 withTargetFromOptions :: Options -> (TargetMachine -> IO a) -> IO a
 withTargetFromOptions o =
@@ -67,8 +71,16 @@ withTargetFromOptions o =
     withTargetOptions $ \options ->
       withTargetMachine target tname cpu features options Reloc.Default CodeModel.Default CodeGenOpt.Default f
 
+setLLVMCommandLineOptions :: [String] -> IO ()
+setLLVMCommandLineOptions [] = return ()
+setLLVMCommandLineOptions opts = do
+  prog <- getProgName
+  let args = map fromString $ prog : opts
+  parseCommandLineOptions args Nothing
+
 genCode :: Options -> Text -> FilePath -> Program -> IO ()
-genCode o text name pgm =
+genCode o text name pgm = do
+  setLLVMCommandLineOptions $ llvmOptions o
   withContext $ \context ->
     withTargetFromOptions o $ \target -> do
       dataLayout <- getTargetMachineDataLayout target
