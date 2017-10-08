@@ -18,7 +18,6 @@ import LLVM.Analysis
 import LLVM.Exception
 import LLVM.Target
 import qualified LLVM.Relocation as Reloc
-import qualified LLVM.Target.Options as TO
 import qualified LLVM.CodeModel as CodeModel
 import qualified LLVM.CodeGenOpt as CodeGenOpt
 import qualified Data.ByteString.Char8 as C
