@@ -20,13 +20,13 @@ Building
 It is recommended to use [stack](https://docs.haskellstack.org/en/stable/README/)
 to build the program:
 
-```zsh
+```
 % stack build
 ```
 
 After this IMP programs can be compiled by running:
 
-```zsh
+```
 % stack exec -- impc -o hello.ll examples/hello.imp
 ```
 
@@ -34,7 +34,7 @@ This generates LLVM assembly file. Use LLVM tools to further compile to
 native assembler code or to produce an executable. An example using
 [clang](https://clang.llvm.org):
 
-```zsh
+```
 % clang -o hello hello.ll stdlib/impstd.c
 % ./hello
 Hello World!
