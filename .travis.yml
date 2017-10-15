@@ -4,8 +4,8 @@ language: generic
 
 env:
   global:
-  - GCC=gcc-5.0
-  - GXX=g++-5.0
+  - GCC=gcc-5
+  - GXX=g++-5
 
 cache:
   directories:
