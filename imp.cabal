@@ -36,8 +36,8 @@ library
   build-depends:       base >= 4.7 && < 5
                      , megaparsec == 6.*
                      , text
-                     , llvm-hs-pure
-                     , llvm-hs
+                     , llvm-hs-pure >= 5.1.0 && < 6
+                     , llvm-hs >= 5.1.0 && < 6
                      , containers
                      , mtl
                      , bytestring
