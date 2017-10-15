@@ -97,8 +97,8 @@ newtype SubCodegen a = SubCodegen
                                 , MonadState CodegenState
                                 )
 
-instance MonadLoc SubCodegen where
-  withLoc f x = local (\e -> e { location = getLoc x }) $ f $ unLoc x
+instance WithLoc SubCodegen where
+  withNewLoc p = local (\e -> e { location = p })
   currentLoc = reader location
 
 liftG :: GlobalCodegen a -> SubCodegen a

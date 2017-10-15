@@ -40,7 +40,7 @@ import Data.Version
 import qualified Data.ByteString.UTF8 as U8
 import qualified Data.ByteString as B
 
-class (MonadError (Located CodegenError) m, MonadLoc m) => MonadCodegen m where
+class (MonadError (Located CodegenError) m, WithLoc m) => MonadCodegen m where
   emitString :: String -> m Operand
   useStdCall :: StandardCall -> m ()
 
@@ -71,8 +71,8 @@ newtype GlobalCodegen a = GlobalCodegen
                                    , MonadState CodegenState
                                    , MonadError (Located CodegenError))
 
-instance MonadLoc GlobalCodegen where
-  withLoc f x = local (\e -> e { location = getLoc x }) $ f $ unLoc x
+instance WithLoc GlobalCodegen where
+  withNewLoc p = local (\e -> e { location = p })
   currentLoc = reader location
 
 instance MonadCodegen GlobalCodegen where

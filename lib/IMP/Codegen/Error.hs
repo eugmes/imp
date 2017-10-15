@@ -63,7 +63,7 @@ eShow MainHasArguments = "'main' should be a procedure with no arguments."
 instance ShowErrorComponent CodegenError where
   showErrorComponent = eShow
 
-throwLocatedError :: (MonadLoc m, MonadError (Located e) m) => e -> m a
+throwLocatedError :: (WithLoc m, MonadError (Located e) m) => e -> m a
 throwLocatedError e = do
   loc <- currentLoc
   throwError $ Located loc e
