@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+-- | Gode generation for subroutines.
 
 module IMP.Codegen.SubCodegen
     ( SubCodegen
@@ -52,35 +53,35 @@ type Names = Map.Map String Int
 data CodegenEnv = CodegenEnv
                 { location :: SourcePos
                 , loopExitBlock :: Maybe Name
-                -- |^ Exit block for innermost loop
+                -- ^ Exit block for innermost loop
                 } deriving Show
 
 data CodegenState = CodegenState
                   { currentBlock :: Name
-                  -- |^ Name of the active block to append to
+                  -- ^ Name of the active block to append to
                   , exitBlock :: Maybe Name
-                  -- |^ Block containing return
+                  -- ^ Block containing return
                   , subReturn :: Maybe (I.Type, Operand)
-                  -- |^ Subroutine return type and location
+                  -- ^ Subroutine return type and location
                   , blocks :: Map.Map Name BlockState
-                  -- |^ Blocks of function
+                  -- ^ Blocks of function
                   , symtab :: SymbolTable
-                  -- |^ Function scope symbol table
+                  -- ^ Function scope symbol table
                   , blockCount :: Int
-                  -- |^ Count of basic blocks
+                  -- ^ Count of basic blocks
                   , count :: Word
-                  -- |^ Count of unnamed instructions
+                  -- ^ Count of unnamed instructions
                   , names :: Names
-                  -- |^ Name supply
+                  -- ^ Name supply
                   } deriving Show
 
 data BlockState = BlockState
                 { idx :: Int
-                -- |^ Block index
+                -- ^ Block index
                 , stack :: [Named Instruction]
-                -- |^ Stack of unstructions
+                -- ^ Stack of unstructions
                 , term :: Maybe (Named Terminator)
-                -- |^ Block terminator
+                -- ^ Block terminator
                 } deriving Show
 
 emptyBlock :: Int -> BlockState
