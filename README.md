@@ -1,6 +1,8 @@
 IMP Compiler Implemented in Haskell
 ===================================
 
+[![Build Status](https://travis-ci.org/eugmes/imp.svg?branch=master)](https://travis-ci.org/eugmes/imp)
+
 This is an implementation of IMP compiler in Haskell programming
 language. It uses [LLVM](http://llvm.org) as compiler backend.
 [Megaparsec](https://hackage.haskell.org/package/megaparsec) is used
