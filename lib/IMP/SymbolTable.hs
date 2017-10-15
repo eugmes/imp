@@ -26,7 +26,7 @@ newScope (SymbolTable l) = SymbolTable $ Map.empty <| l
 -- The expression (@'insert' k v symtab@) inserts a new value @v@ with key @k@
 -- into the active scope if it is not already present there.
 --
--- In case of success returns updated symbol table as @'Rigth'@. In case
+-- In case of success returns updated symbol table as @'Right'@. In case
 -- of error an old value of the symbol is returned as @'Left'@.
 insert :: Ord k => k -> v -> SymbolTable k v -> Either v (SymbolTable k v)
 insert k v (SymbolTable (s :| ss)) =
