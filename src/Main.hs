@@ -41,6 +41,7 @@ data Options = Options
   , outputFile :: Maybe FilePath
   , optimizationLevel :: Maybe Word
   , triple :: Maybe String
+  , cpu :: Maybe String
   , llvmOptions :: [String]
   } deriving Show
 
@@ -54,6 +55,7 @@ options = Options
   <*> optional (option str (short 'o' <> metavar "FILE" <> help "Redirect output to FILE"))
   <*> optional (option auto (short 'O' <> metavar "LEVEL" <> help "Set optimization level"))
   <*> optional (option str (long "triple" <> metavar "TRIPLE" <> help "Target triple for code generation"))
+  <*> optional (option str (long "cpu" <> metavar "CPU" <> help "Target a specific CPU type"))
   <*> many (option str (long "llvm" <> metavar "OPTION" <> help "Additional options to pass to LLVM"))
 
 withTargetFromOptions :: Options -> (TargetMachine -> IO a) -> IO a
@@ -63,10 +65,10 @@ withTargetFromOptions o f = do
     Nothing -> getDefaultTargetTriple
     Just t -> return $ fromString t
   (target, tname) <- lookupTarget Nothing triple
-  let cpu = ""
+  let cpuName = maybe "" fromString $ cpu o
       features = Map.empty
   withTargetOptions $ \options ->
-    withTargetMachine target tname cpu features options Reloc.Default CodeModel.Default CodeGenOpt.Default f
+    withTargetMachine target tname cpuName features options Reloc.Default CodeModel.Default CodeGenOpt.Default f
 
 setLLVMCommandLineOptions :: [String] -> IO ()
 setLLVMCommandLineOptions [] = return ()
