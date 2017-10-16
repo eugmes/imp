@@ -1,4 +1,5 @@
 var g : integer;
+-- Unused variable for testing
 var x : boolean;
 
 procedure main () is

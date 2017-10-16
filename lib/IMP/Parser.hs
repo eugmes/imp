@@ -20,8 +20,11 @@ type Parser = Parsec CustomError T.Text
 customFailure :: CustomError -> Parser a
 customFailure = fancyFailure . Set.singleton . ErrorCustom
 
+comment :: Parser ()
+comment = L.skipLineComment "--"
+
 sc :: Parser ()
-sc = L.space space1 empty empty
+sc = L.space space1 comment empty
 
 located :: Parser a -> Parser (Located a)
 located m = Located <$> getPosition <*> m
