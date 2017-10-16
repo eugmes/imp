@@ -13,7 +13,7 @@ import qualified Data.Text.Lazy.IO as TLIO
 import qualified Text.Megaparsec as P
 import LLVM
 import LLVM.Context
-import LLVM.PassManager
+import LLVM.PassManager as PM
 import LLVM.Analysis
 import LLVM.Exception
 import LLVM.Target
@@ -93,6 +93,11 @@ genCode o text name pgm = do
         Right ast ->
           withModuleFromAST context ast $ \m -> do
             verify m
+            let passes = defaultCuratedPassSetSpec
+                       { PM.optLevel = optimizationLevel o
+                       , PM.dataLayout = Just dataLayout
+                       , PM.targetMachine = Just target
+                       }
             withPassManager passes $ \pm -> do
               void $ runPassManager pm m
               llstr <- case lastStage o of
@@ -102,7 +107,6 @@ genCode o text name pgm = do
               outputAssembly llstr
  where
   outputAssembly = maybe C.putStr C.writeFile $ outputFile o
-  passes = defaultCuratedPassSetSpec { optLevel = optimizationLevel o }
 
 outputTree :: Options -> Program -> IO ()
 outputTree o tree = writeOutput $ showTree tree <> "\n"
