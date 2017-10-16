@@ -57,18 +57,16 @@ options = Options
   <*> many (option str (long "llvm" <> metavar "OPTION" <> help "Additional options to pass to LLVM"))
 
 withTargetFromOptions :: Options -> (TargetMachine -> IO a) -> IO a
-withTargetFromOptions o =
-  case triple o of
-    Nothing -> withHostTargetMachine
-    Just t -> withNamedTarget t
- where
-  withNamedTarget t f = do
-    initializeAllTargets
-    (target, tname) <- lookupTarget Nothing (fromString t)
-    let cpu = ""
-        features = Map.empty
-    withTargetOptions $ \options ->
-      withTargetMachine target tname cpu features options Reloc.Default CodeModel.Default CodeGenOpt.Default f
+withTargetFromOptions o f = do
+  initializeAllTargets
+  triple <- case triple o of
+    Nothing -> getDefaultTargetTriple
+    Just t -> return $ fromString t
+  (target, tname) <- lookupTarget Nothing triple
+  let cpu = ""
+      features = Map.empty
+  withTargetOptions $ \options ->
+    withTargetMachine target tname cpu features options Reloc.Default CodeModel.Default CodeGenOpt.Default f
 
 setLLVMCommandLineOptions :: [String] -> IO ()
 setLLVMCommandLineOptions [] = return ()
