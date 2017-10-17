@@ -40,6 +40,14 @@ native assembler code or to produce an executable. An example using
 Hello World!
 ```
 
+Alternatively programs can be compiled via native assembly:
+```
+% stack exec -- impc -S -o hello.s examples/hello.imp
+% gcc -o hello hello.s stdlib/impstd.c
+% ./hello
+Hello World!
+```
+
 Extensions
 ----------
 
