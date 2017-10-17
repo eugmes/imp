@@ -171,7 +171,7 @@ function = do
   checkSubName name
   return $ Function name params returnType vars body
 
-procBody :: Parser [Located Statement]
+procBody :: Parser Statements
 procBody = between (rword "begin") (rword "end") statements
 
 paramList :: Parser ParamList
@@ -193,14 +193,14 @@ statement = IfStatement <$> (rword "if" *> located expression <* rword "then") <
         <|> NewlineStatement <$ rword "newline"
         <|> AssignStatement <$> identifier <* equals <*> located expression
 
-elsePart :: Parser [Located Statement]
+elsePart :: Parser Statements
 elsePart = rword "else" *> statements
        <|> pure []
 
 returnStatement :: Parser Statement
 returnStatement = rword "return" *> (ReturnValStatement <$> located expression <|> pure ReturnStatement)
 
-statements :: Parser [Located Statement]
+statements :: Parser Statements
 statements = located statement `endBy` semicolon
 
 expressionOrString :: Parser ExpressionOrString

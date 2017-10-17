@@ -12,14 +12,14 @@ data Type = IntegerType | BooleanType deriving (Show, Eq, Ord)
 
 newtype Number = Number Integer deriving (Show, Eq, Ord)
 
-data Subroutine = Procedure (Located ID) [Located ParamList] [Located VarDec] [Located Statement]
-                | Function (Located ID) [Located ParamList] (Located Type) [Located VarDec] [Located Statement]
+data Subroutine = Procedure (Located ID) [Located ParamList] [Located VarDec] Statements
+                | Function (Located ID) [Located ParamList] (Located Type) [Located VarDec] Statements
                 deriving Show
 
 data ParamList = ParamList [Located ID] (Located Type) deriving Show
 
-data Statement = IfStatement (Located Expression) [Located Statement] [Located Statement]
-               | WhileStatement (Located Expression) [Located Statement]
+data Statement = IfStatement (Located Expression) Statements Statements
+               | WhileStatement (Located Expression) Statements
                | AssignStatement (Located ID) (Located Expression)
                | CallStatement (Located ID) [Located Expression]
                | InputStatement (Located ID)
@@ -31,6 +31,8 @@ data Statement = IfStatement (Located Expression) [Located Statement] [Located S
                | HaltStatement
                | NewlineStatement
                deriving Show
+
+type Statements = [Located Statement]
 
 data ExpressionOrString = Exp (Located Expression)
                         | Str (Located String) deriving Show

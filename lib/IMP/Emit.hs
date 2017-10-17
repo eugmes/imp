@@ -49,7 +49,7 @@ codegenSubDecl (I.Function name params retty _ _) =
  where
   ts = paramTypes params
 
-codegenSub' :: Located I.ID -> Maybe I.Type -> [Located I.ParamList] -> [Located I.VarDec] -> [Located I.Statement] -> GlobalCodegen ()
+codegenSub' :: Located I.ID -> Maybe I.Type -> [Located I.ParamList] -> [Located I.VarDec] -> I.Statements -> GlobalCodegen ()
 codegenSub' name retty params vars body = do
   blocks <- execSubCodegen cg
   defineSub (unLoc name) retty args blocks
@@ -114,7 +114,7 @@ typeCheckExpression t = withLoc (codegenExpression >=> check)
  where
   check (t', op) = typeCheck t t' >> return op
 
-maybeGenBlock :: String -> Name -> [Located I.Statement] -> SubCodegen Name
+maybeGenBlock :: String -> Name -> I.Statements -> SubCodegen Name
 maybeGenBlock _ contName [] = return contName
 
 maybeGenBlock newTemlate contName stmts = do
