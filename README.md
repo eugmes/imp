@@ -39,3 +39,13 @@ native assembler code or to produce an executable. An example using
 % ./hello
 Hello World!
 ```
+
+Extensions
+----------
+
+The language has several extensions compared to the original specification.
+All of the extensions are taken from [Ada](http://www.ada-auth.org/standards/12rm/html/RM-TOC.html):
+
+  - String literals can have embedded quotation marks by repeating them twice.
+
+  - If expressions can have additional `elsif` parts.
