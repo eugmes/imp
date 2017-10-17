@@ -2,6 +2,8 @@ module IMP.AST where
 
 import IMP.SourceLoc
 
+import Data.List.NonEmpty (NonEmpty)
+
 data Program = Program [Located VarDec] [Located Subroutine] deriving Show
 
 data VarDec = VarDec [Located ID] (Located Type) deriving Show
@@ -18,7 +20,7 @@ data Subroutine = Procedure (Located ID) [Located ParamList] [Located VarDec] St
 
 data ParamList = ParamList [Located ID] (Located Type) deriving Show
 
-data Statement = IfStatement (Located Expression) Statements Statements
+data Statement = IfStatement (NonEmpty ConditionWithStatements) Statements
                | WhileStatement (Located Expression) Statements
                | AssignStatement (Located ID) (Located Expression)
                | CallStatement (Located ID) [Located Expression]
@@ -33,6 +35,8 @@ data Statement = IfStatement (Located Expression) Statements Statements
                deriving Show
 
 type Statements = [Located Statement]
+
+type ConditionWithStatements = (Located Expression, Statements)
 
 data ExpressionOrString = Exp (Located Expression)
                         | Str (Located String) deriving Show

@@ -148,17 +148,23 @@ codegenArgs args exps = do
 
 codegenStatement :: I.Statement -> SubCodegen ()
 
-codegenStatement (I.IfStatement cond ifTrue ifFalse) = do
-  op <- withLoc (codegenExpression >=> check) cond
-  ifExitB <- addBlock "if.exit"
-  ifTrueB <- maybeGenBlock "if.true" ifExitB ifTrue
-  ifFalseB <- maybeGenBlock "if.false" ifExitB ifFalse
+codegenStatement (I.IfStatement condPart elseStmts) = do
+  exitB <- addBlock "if.exit"
+  mapM_ (emitCondPart exitB) condPart
+  mapM_ (withLoc codegenStatement) elseStmts
+  br exitB
 
-  cbr op ifTrueB ifFalseB
-
-  setBlock ifExitB
+  setBlock exitB
  where
   check = checkBoolean NonBooleanIfCondition
+
+  emitCondPart exitB (cond, stmts) = do
+    op <- withLoc (codegenExpression >=> check) cond
+    ifB <- maybeGenBlock "then" exitB stmts
+    elseB <- addBlock "else"
+
+    cbr op ifB elseB
+    setBlock elseB
 
 codegenStatement (I.WhileStatement cond body) = do
   whileCondB <- addBlock "while.cond"

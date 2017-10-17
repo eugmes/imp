@@ -19,6 +19,7 @@ import qualified Text.Megaparsec.Char.Lexer as L
 import qualified Data.Text as T
 import Data.Functor.Syntax
 import qualified Data.Set as Set
+import Data.List.NonEmpty (NonEmpty(..))
 
 type Parser = Parsec CustomError T.Text
 
@@ -63,7 +64,7 @@ rword :: T.Text -> Parser ()
 rword w = void $ lexeme' (string' w *> notFollowedBy alphaNumChar)
 
 rws :: [String]
-rws = [ "and", "begin", "boolean", "break", "call", "else", "end"
+rws = [ "and", "begin", "boolean", "break", "call", "else", "elsif", "end"
       , "false", "function", "halt", "if", "input", "integer"
       , "is", "loop", "newline", "not", "null", "or", "output"
       , "procedure", "return", "then", "true", "var", "while"
@@ -181,7 +182,7 @@ paramLists :: Parser [Located ParamList]
 paramLists = located paramList `sepBy` semicolon
 
 statement :: Parser Statement
-statement = IfStatement <$> (rword "if" *> located expression <* rword "then") <*> statements <*> elsePart <* rword "end" <* rword "if"
+statement = ifStatement
         <|> WhileStatement <$> (rword "while" *> located expression <* rword "loop") <*> statements <* rword "end" <* rword "loop"
         <|> CallStatement <$> (rword "call" *> identifier) <*> parens expressions
         <|> InputStatement <$> (rword "input" *> parens identifier)
@@ -192,6 +193,21 @@ statement = IfStatement <$> (rword "if" *> located expression <* rword "then") <
         <|> HaltStatement <$ rword "halt"
         <|> NewlineStatement <$ rword "newline"
         <|> AssignStatement <$> identifier <* equals <*> located expression
+
+ifStatement :: Parser Statement
+ifStatement = do
+  void $ rword "if"
+  cond <- located expression
+  void $ rword "then"
+  stmts <- statements
+  elsifs <- many elsifPart
+  elseStmts <- elsePart
+  void $ rword "end"
+  void $ rword "if"
+  return $ IfStatement ((cond, stmts) :| elsifs) elseStmts
+
+elsifPart :: Parser ConditionWithStatements
+elsifPart = (,) <$> (rword "elsif" *> located expression <* rword "then") <*> statements
 
 elsePart :: Parser Statements
 elsePart = rword "else" *> statements
