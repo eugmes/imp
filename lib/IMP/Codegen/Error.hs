@@ -35,6 +35,7 @@ data CodegenError = InternalError String
                   | SymbolNotInScope ID
                   | MainIsAFunction
                   | MainHasArguments
+                  | IntegerLiteralOutOfTypeRange Number
                   deriving (Eq, Ord)
 
 eShow :: CodegenError -> String
@@ -59,6 +60,7 @@ eShow (LocalRedefinition name) = printf "Attempt to redefine local symbol '%s'."
 eShow (SymbolNotInScope name) = printf "Symbol not in scope: '%s'." (getID name)
 eShow MainIsAFunction = "'main' should be a procedure."
 eShow MainHasArguments = "'main' should be a procedure with no arguments."
+eShow (IntegerLiteralOutOfTypeRange (Number n)) = printf "Integer literal is outside of allowed range: %d" n
 
 instance ShowErrorComponent CodegenError where
   showErrorComponent = eShow

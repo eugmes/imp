@@ -284,8 +284,10 @@ codegenExpression (I.BinOpExp leftExp binaryOp rightExp) = do
   srem = wrap I.IntegerType AST.SRem
   and = wrap I.BooleanType AST.And
 
-codegenExpression (I.NumberExpression (I.Number num)) =
-  return (I.IntegerType, op)
+codegenExpression (I.NumberExpression c@(I.Number num)) =
+  if checkIntegerBounds num
+    then return (I.IntegerType, op)
+    else throwLocatedError $ IntegerLiteralOutOfTypeRange c
  where
   op = ConstantOperand $ C.Int (typeBits integer) num
 

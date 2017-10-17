@@ -10,7 +10,7 @@ newtype ID = ID {getID :: String} deriving (Show, Eq, Ord)
 
 data Type = IntegerType | BooleanType deriving (Show, Eq, Ord)
 
-newtype Number = Number Integer deriving Show
+newtype Number = Number Integer deriving (Show, Eq, Ord)
 
 data Subroutine = Procedure (Located ID) [Located ParamList] [Located VarDec] [Located Statement]
                 | Function (Located ID) [Located ParamList] (Located Type) [Located VarDec] [Located Statement]

@@ -1,0 +1,6 @@
+procedure main () is
+begin
+  output(42); newline;
+  -- This should trigger exception
+  output(2147483648); newline;
+end main;

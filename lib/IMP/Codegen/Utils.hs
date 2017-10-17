@@ -15,6 +15,7 @@ module IMP.Codegen.Utils
   , constFalse
   , constZero
   , boolean
+  , checkIntegerBounds
   ) where
 
 import qualified IMP.AST as I
@@ -25,6 +26,7 @@ import qualified LLVM.AST.FunctionAttribute as FA
 import LLVM.AST.Constant as C
 import LLVM.AST.Type
 import LLVM.AST.AddrSpace
+import Data.Int
 
 data SymbolType = SymbolVariable I.Type
                 | SymbolProcedure [I.Type]
@@ -95,6 +97,12 @@ integer = i32
 boolean = i1
 stringType = PointerType i8 $ AddrSpace 0
 integerAndBoolean = StructureType False [integer, boolean]
+
+checkIntegerBounds :: Integer -> Bool
+checkIntegerBounds n = n >= minInteger  && n <= maxInteger
+ where
+  minInteger = fromIntegral (minBound :: Int32)
+  maxInteger = fromIntegral (maxBound :: Int32)
 
 constFalse, constTrue :: Operand
 constFalse = ConstantOperand $ C.Int 1 0
