@@ -54,7 +54,7 @@ executable impc
                      , megaparsec == 6.*
                      , pretty-simple
                      , text
-                     , llvm-hs
+                     , llvm-hs >= 5.1.0 && < 6
                      , bytestring
                      , optparse-applicative
                      , containers
