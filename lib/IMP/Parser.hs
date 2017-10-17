@@ -1,6 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module IMP.Parser (Parser, parser) where
+module IMP.Parser
+  ( Parser
+  , parser
+  -- Other exports for testing
+  , stringLiteral
+  ) where
 
 import IMP.AST
 import IMP.SourceLoc
@@ -50,7 +55,9 @@ decimal = lexeme' L.decimal
 stringLiteral :: Parser (Located String)
 stringLiteral = lexeme stringLiteral'
  where
-  stringLiteral' = char '"' >> manyTill L.charLiteral (char '"')
+  stringLiteral' = char '"' *> many stringElement <* char '"'
+  stringElement = try (char '"' *> char '"')
+              <|> satisfy (\c -> isPrint c && c /= '"')
 
 rword :: T.Text -> Parser ()
 rword w = void $ lexeme' (string' w *> notFollowedBy alphaNumChar)

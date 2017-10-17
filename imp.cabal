@@ -59,3 +59,21 @@ executable impc
                      , optparse-applicative
                      , containers
   default-language:    Haskell2010
+
+test-suite test
+  type: exitcode-stdio-1.0
+  build-depends:
+      base
+    , imp
+    , megaparsec == 6.*
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+    , QuickCheck
+    , text
+  other-modules:
+    IMP.Test.Parser
+    IMP.Test.Tests
+  hs-source-dirs: test
+  main-is: Test.hs
+  default-language: Haskell2010
