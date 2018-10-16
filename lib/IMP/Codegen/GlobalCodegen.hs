@@ -25,7 +25,7 @@ import IMP.Codegen.Error
 import qualified LLVM.AST as AST
 import LLVM.AST hiding (type', functionAttributes, metadata)
 import LLVM.AST.Type hiding (void)
-import LLVM.AST.Global
+import LLVM.AST.Global hiding (metadata)
 import LLVM.AST.Constant hiding (type')
 import qualified LLVM.AST.Constant as C
 import LLVM.AST.Linkage
@@ -202,7 +202,7 @@ emitStdCallDecl c = addDefn d
   attrs = Right <$> stdCallAttrs c
   d = GlobalDefinition $
       functionDefaults { name = n
-                       , parameters = ([Parameter ty "" [] | ty <- args], False)
+                       , parameters = ([Parameter ty argName [] | (ty, argName) <- args], False)
                        , returnType = retty
                        , functionAttributes = attrs
                        }
@@ -216,13 +216,13 @@ newMetadataNodeID = do
   modify $ \s -> s { nextMetadataNum = n + 1 }
   return $ MetadataNodeID n
 
-metadata :: [Maybe Metadata] -> GlobalCodegen MetadataNodeID
-metadata defs = do
+metadata :: MDNode -> GlobalCodegen MetadataNodeID
+metadata node = do
   nd <- newMetadataNodeID
-  addDefn $ MetadataNodeDefinition nd defs
+  addDefn $ MetadataNodeDefinition nd node
   return nd
 
 emitCompilerInfo :: GlobalCodegen ()
 emitCompilerInfo = do
-  nd <- metadata [Just $ MDString $ fromString $ "IMP version " ++ showVersion version]
+  nd <- metadata $ MDTuple [Just $ MDString $ fromString $ "IMP version " ++ showVersion version]
   namedMetadata "llvm.ident" [nd]

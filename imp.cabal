@@ -36,8 +36,8 @@ library
   build-depends:       base >= 4.7 && < 5
                      , megaparsec == 6.*
                      , text
-                     , llvm-hs-pure >= 5.1.0 && < 6
-                     , llvm-hs >= 5.1.0 && < 6
+                     , llvm-hs-pure == 7.*
+                     , llvm-hs == 7.*
                      , containers
                      , mtl
                      , bytestring
@@ -54,7 +54,7 @@ executable impc
                      , megaparsec == 6.*
                      , pretty-simple
                      , text
-                     , llvm-hs >= 5.1.0 && < 6
+                     , llvm-hs == 7.*
                      , bytestring
                      , optparse-applicative
                      , containers

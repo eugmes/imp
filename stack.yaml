@@ -1,7 +1,6 @@
-resolver: lts-9.2
+resolver: lts-12.13
 packages:
 - '.'
 extra-deps:
-- megaparsec-6.1.1
-- llvm-hs-5.1.0
-- llvm-hs-pure-5.1.0
+- llvm-hs-7.0.0
+- llvm-hs-pure-7.0.0

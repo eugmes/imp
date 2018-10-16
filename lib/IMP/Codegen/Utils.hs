@@ -67,13 +67,13 @@ stdCallType CallSSubWithOverflow = integerAndBoolean
 stdCallType CallSMulWithOverflow = integerAndBoolean
 stdCallType _ = VoidType
 
-stdCallArgs :: StandardCall -> [Type]
-stdCallArgs CallOutputInteger = [integer]
-stdCallArgs CallOutputBoolean = [boolean]
-stdCallArgs CallOutputString = [stringType]
-stdCallArgs CallSAddWithOverflow = [integer, integer]
-stdCallArgs CallSSubWithOverflow = [integer, integer]
-stdCallArgs CallSMulWithOverflow = [integer, integer]
+stdCallArgs :: StandardCall -> [(Type, Name)]
+stdCallArgs CallOutputInteger = [(integer, "val")]
+stdCallArgs CallOutputBoolean = [(boolean, "val")]
+stdCallArgs CallOutputString = [(stringType, "s")]
+stdCallArgs CallSAddWithOverflow = [(integer, "a"), (integer, "b")]
+stdCallArgs CallSSubWithOverflow = [(integer, "a"), (integer, "b")]
+stdCallArgs CallSMulWithOverflow = [(integer, "a"), (integer, "b")]
 stdCallArgs _ = []
 
 stdCallAttrs :: StandardCall -> [FA.FunctionAttribute]
@@ -86,7 +86,7 @@ stdCallOp :: StandardCall -> Operand
 stdCallOp c = ConstantOperand $ GlobalReference ty $ stdCallName c
  where
   retty = stdCallType c
-  ty = ptr $ FunctionType retty (stdCallArgs c) False
+  ty = ptr $ FunctionType retty (fst <$> stdCallArgs c) False
 
 type SymbolTableEntry = (SymbolType, Operand)
 

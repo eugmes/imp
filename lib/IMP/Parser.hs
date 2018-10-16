@@ -10,7 +10,7 @@ module IMP.Parser
 import IMP.AST
 import IMP.SourceLoc
 import IMP.Parser.Error
-import Control.Applicative
+import Control.Applicative hiding (many)
 import Control.Monad
 import Data.Char
 import Text.Megaparsec
@@ -18,13 +18,9 @@ import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 import qualified Data.Text as T
 import Data.Functor.Syntax
-import qualified Data.Set as Set
 import Data.List.NonEmpty (NonEmpty(..))
 
 type Parser = Parsec CustomError T.Text
-
-customFailure :: CustomError -> Parser a
-customFailure = fancyFailure . Set.singleton . ErrorCustom
 
 comment :: Parser ()
 comment = L.skipLineComment "--"
@@ -77,6 +73,7 @@ idName = do
   lexeme p
  where
   p = (:) <$> letterChar <*> many alphaNumChar
+  check :: String -> Parser ()
   check x = when (map toLower x `elem` rws) $
               customFailure $ RWordAsIdentifier x
 
