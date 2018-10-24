@@ -193,14 +193,14 @@ statement = ifStatement
 
 ifStatement :: Parser Statement
 ifStatement = do
-  void $ rword "if"
+  rword "if"
   cond <- located expression
-  void $ rword "then"
+  rword "then"
   stmts <- statements
   elsifs <- many elsifPart
   elseStmts <- elsePart
-  void $ rword "end"
-  void $ rword "if"
+  rword "end"
+  rword "if"
   return $ IfStatement ((cond, stmts) :| elsifs) elseStmts
 
 elsifPart :: Parser ConditionWithStatements
