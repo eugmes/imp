@@ -13,6 +13,7 @@ import IMP.Parser.Error
 import Control.Applicative hiding (many)
 import Control.Monad
 import Data.Char
+import Data.Foldable
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -58,6 +59,9 @@ stringLiteral = lexeme stringLiteral'
 
 rword :: T.Text -> Parser ()
 rword w = void $ lexeme' (string' w *> notFollowedBy alphaNumChar)
+
+rwords :: [T.Text] -> Parser ()
+rwords = traverse_ rword
 
 rws :: [String]
 rws = [ "and", "begin", "boolean", "break", "call", "else", "elsif", "end"
@@ -180,7 +184,7 @@ paramLists = located paramList `sepBy` semicolon
 
 statement :: Parser Statement
 statement = ifStatement
-        <|> WhileStatement <$> (rword "while" *> located expression <* rword "loop") <*> statements <* rword "end" <* rword "loop"
+        <|> WhileStatement <$> (rword "while" *> located expression <* rword "loop") <*> statements <* rwords ["end", "loop"]
         <|> CallStatement <$> (rword "call" *> identifier) <*> parens expressions
         <|> InputStatement <$> (rword "input" *> parens identifier)
         <|> OutputStatement <$> (rword "output" *> parens expressionOrString)
@@ -199,8 +203,7 @@ ifStatement = do
   stmts <- statements
   elsifs <- many elsifPart
   elseStmts <- elsePart
-  rword "end"
-  rword "if"
+  rwords ["end", "if"]
   return $ IfStatement ((cond, stmts) :| elsifs) elseStmts
 
 elsifPart :: Parser ConditionWithStatements
