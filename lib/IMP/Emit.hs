@@ -12,10 +12,11 @@ import IMP.Codegen.Utils
 import IMP.Codegen.Error
 import IMP.SourceLoc
 import qualified LLVM.AST as AST
-import LLVM.AST hiding (type')
+import LLVM.AST hiding (type', mkName)
 import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.IntegerPredicate as IP
 import Control.Monad
+import qualified Data.Text as T
 
 compileProgram :: CodegenOptions -> I.Program -> Either (Located CodegenError) AST.Module
 compileProgram opts = execGlobalCodegen opts . codegenProgram
@@ -69,7 +70,7 @@ codegenSub' name retty params vars body = do
 
     forM_ args $ \(ty, a) -> do
       let t = typeToLLVM ty
-      var <- alloca (getID (unLoc a) ++ ".addr") t
+      var <- alloca (getID (unLoc a) <> ".addr") t
       store var $ LocalReference t $ mkName $ getID $ unLoc a
       withLoc (\n -> defineLocalVar n ty var) a
     codegenLocals vars
@@ -114,7 +115,7 @@ typeCheckExpression t = withLoc (codegenExpression >=> check)
  where
   check (t', op) = typeCheck t t' >> return op
 
-maybeGenBlock :: String -> Name -> I.Statements -> SubCodegen Name
+maybeGenBlock :: T.Text -> Name -> I.Statements -> SubCodegen Name
 maybeGenBlock _ contName [] = return contName
 
 maybeGenBlock newTemlate contName stmts = do

@@ -6,9 +6,10 @@ import IMP.AST
 import IMP.SourceLoc
 import Text.Megaparsec.Error
 import Text.Printf
+import qualified Data.Text as T
 
 data CustomError = EndMismatch (Located ID) ID
-                 | RWordAsIdentifier String
+                 | RWordAsIdentifier T.Text
                  deriving (Eq, Ord)
 
 instance ShowErrorComponent CustomError where

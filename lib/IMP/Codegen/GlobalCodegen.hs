@@ -23,7 +23,7 @@ import qualified IMP.SymbolTable as Tab
 import IMP.SourceLoc
 import IMP.Codegen.Error
 import qualified LLVM.AST as AST
-import LLVM.AST hiding (type', functionAttributes, metadata)
+import LLVM.AST hiding (type', functionAttributes, metadata, mkName)
 import LLVM.AST.Type hiding (void)
 import LLVM.AST.Global hiding (metadata)
 import LLVM.AST.Constant hiding (type')
@@ -36,12 +36,15 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
 import Data.String
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import Data.Version
 import qualified Data.ByteString.UTF8 as U8
 import qualified Data.ByteString as B
+import TextShow (showt)
 
 class (MonadError (Located CodegenError) m, WithLoc m) => MonadCodegen m where
-  emitString :: String -> m Operand
+  emitString :: T.Text -> m Operand
   useStdCall :: StandardCall -> m ()
 
 data CodegenOptions = CodegenOptions
@@ -160,9 +163,9 @@ newStringName :: GlobalCodegen Name
 newStringName = do
   n <- gets nextStringNum
   modify $ \s -> s { nextStringNum = n + 1 }
-  return $ mkName $ ".str." ++ show n
+  return $ mkName $ ".str." <> showt n
 
-globalEmitString :: String -> GlobalCodegen Operand
+globalEmitString :: T.Text -> GlobalCodegen Operand
 globalEmitString s = do
   name <- newStringName
   let d = GlobalDefinition $
@@ -181,7 +184,7 @@ globalEmitString s = do
   return op
  where
   content :: U8.ByteString
-  content = fromString s
+  content = TE.encodeUtf8 s
   vals = map (C.Int 8 . fromIntegral) (B.unpack content ++ [0])
   size = fromIntegral $ length vals
   ini = C.Array i8 vals

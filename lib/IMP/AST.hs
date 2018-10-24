@@ -3,12 +3,13 @@ module IMP.AST where
 import IMP.SourceLoc
 
 import Data.List.NonEmpty (NonEmpty)
+import qualified Data.Text as T
 
 data Program = Program [Located VarDec] [Located Subroutine] deriving Show
 
 data VarDec = VarDec [Located ID] (Located Type) deriving Show
 
-newtype ID = ID {getID :: String} deriving (Show, Eq, Ord)
+newtype ID = ID {getID :: T.Text} deriving (Show, Eq, Ord)
 
 data Type = IntegerType | BooleanType deriving (Show, Eq, Ord)
 
@@ -39,7 +40,7 @@ type Statements = [Located Statement]
 type ConditionWithStatements = (Located Expression, Statements)
 
 data ExpressionOrString = Exp (Located Expression)
-                        | Str (Located String) deriving Show
+                        | Str (Located T.Text) deriving Show
 
 data Expression = UnOpExp UnaryOp (Located Expression)
                 | BinOpExp (Located Expression) BinaryOp (Located Expression)

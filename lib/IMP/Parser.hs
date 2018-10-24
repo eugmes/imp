@@ -50,10 +50,10 @@ parens = between (symbol' "(") (symbol' ")")
 decimal :: Integral a => Parser a
 decimal = lexeme' L.decimal
 
-stringLiteral :: Parser (Located String)
+stringLiteral :: Parser (Located T.Text)
 stringLiteral = lexeme stringLiteral'
  where
-  stringLiteral' = char '"' *> many stringElement <* char '"'
+  stringLiteral' = T.pack <$> (char '"' *> many stringElement <* char '"')
   stringElement = try (char '"' *> char '"')
               <|> satisfy (\c -> isPrint c && c /= '"')
 
@@ -63,22 +63,22 @@ rword w = void $ lexeme' (string' w *> notFollowedBy alphaNumChar)
 rwords :: [T.Text] -> Parser ()
 rwords = traverse_ rword
 
-rws :: [String]
+rws :: [T.Text]
 rws = [ "and", "begin", "boolean", "break", "call", "else", "elsif", "end"
       , "false", "function", "halt", "if", "input", "integer"
       , "is", "loop", "newline", "not", "null", "or", "output"
       , "procedure", "return", "then", "true", "var", "while"
       ]
 
-idName :: Parser (Located String)
+idName :: Parser (Located T.Text)
 idName = do
   tok <- lookAhead p
   check tok
   lexeme p
  where
-  p = (:) <$> letterChar <*> many alphaNumChar
-  check :: String -> Parser ()
-  check x = when (map toLower x `elem` rws) $
+  p = T.pack <$> ((:) <$> letterChar <*> many alphaNumChar)
+  check :: T.Text -> Parser ()
+  check x = when (T.toLower x `elem` rws) $
               customFailure $ RWordAsIdentifier x
 
 comma, colon, semicolon, equals :: Parser ()
@@ -88,7 +88,7 @@ semicolon = symbol' ";"
 equals = symbol' "="
 
 identifier :: Parser (Located ID)
-identifier = ID . map toLower <$$> idName <?> "identifier"
+identifier = ID . T.toLower <$$> idName <?> "identifier"
 
 typeName :: Parser (Located Type)
 typeName  = located (IntegerType <$ rword "integer")

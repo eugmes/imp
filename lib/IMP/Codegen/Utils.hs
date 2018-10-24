@@ -16,17 +16,21 @@ module IMP.Codegen.Utils
   , constZero
   , boolean
   , checkIntegerBounds
+  , mkName
   ) where
 
 import qualified IMP.AST as I
 import qualified IMP.SymbolTable as Tab
 
-import LLVM.AST
+import LLVM.AST hiding (mkName)
 import qualified LLVM.AST.FunctionAttribute as FA
 import LLVM.AST.Constant as C
 import LLVM.AST.Type
 import LLVM.AST.AddrSpace
 import Data.Int
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import Data.ByteString.Short (toShort)
 
 data SymbolType = SymbolVariable I.Type
                 | SymbolProcedure [I.Type]
@@ -114,3 +118,6 @@ constZero ty = ConstantOperand $ C.Int (typeBits ty) 0
 typeToLLVM :: I.Type -> Type
 typeToLLVM I.IntegerType = integer
 typeToLLVM I.BooleanType = boolean
+
+mkName :: T.Text -> Name
+mkName = Name . toShort . TE.encodeUtf8

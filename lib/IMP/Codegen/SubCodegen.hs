@@ -37,7 +37,7 @@ import IMP.SourceLoc
 import IMP.Codegen.GlobalCodegen
 import IMP.Codegen.Error
 import qualified LLVM.AST as AST
-import LLVM.AST hiding (functionAttributes, metadata)
+import LLVM.AST hiding (functionAttributes, metadata, mkName)
 import qualified LLVM.AST.CallingConvention as CC
 import qualified Data.Map.Strict as Map
 import qualified LLVM.AST.FunctionAttribute as FA
@@ -46,9 +46,11 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Data.List
 import Data.Function
+import qualified Data.Text as T
 import Text.Printf
+import TextShow (showt)
 
-type Names = Map.Map String Int
+type Names = Map.Map T.Text Int
 
 data CodegenEnv = CodegenEnv
                 { location :: SourcePos
@@ -165,7 +167,7 @@ exit = do
       return (bname, t)
     Nothing -> throwLocatedError $ InternalError "Exit block was not set."
 
-addBlock :: String -> SubCodegen Name
+addBlock :: T.Text -> SubCodegen Name
 addBlock bname = do
   bls <- gets blocks
   ix <- gets blockCount
@@ -206,11 +208,11 @@ fresh = do
   modify $ \s -> s { count = i + 1 }
   return $ i + 1
 
-uniqueName :: String -> Names -> (String, Names)
+uniqueName :: T.Text -> Names -> (T.Text, Names)
 uniqueName nm ns =
   case Map.lookup nm ns of
     Nothing -> (nm, Map.insert nm 1 ns)
-    Just ix -> (nm ++ show ix, Map.insert nm (ix + 1) ns)
+    Just ix -> (nm <> showt ix, Map.insert nm (ix + 1) ns)
 
 defineLocalVar :: I.ID -> I.Type -> Operand -> SubCodegen ()
 defineLocalVar name ty x = do
@@ -233,7 +235,7 @@ instr ty ins = do
   ref <- UnName <$> fresh
   namedInstr ref ty ins
 
-instr' :: String -> Type -> Instruction -> SubCodegen Operand
+instr' :: T.Text -> Type -> Instruction -> SubCodegen Operand
 instr' n = namedInstr (mkName n)
 
 namedInstr :: Name -> Type -> Instruction -> SubCodegen Operand
@@ -249,7 +251,7 @@ voidInstr ins = do
   let i = stack blk
   modifyBlock (blk { stack = Do ins : i})
 
-alloca :: String -> Type -> SubCodegen Operand
+alloca :: T.Text -> Type -> SubCodegen Operand
 alloca n ty = instr' n ty $ Alloca ty Nothing 0 []
 
 store :: Operand -> Operand -> SubCodegen ()

@@ -24,16 +24,16 @@ escapeString = concatMap escape . unpack
 validParseTest :: (Eq b, Show b) => Parser a -> (a -> b) -> Text -> b -> TestTree
 validParseTest p f input expected = testCase name $ Just expected @=? actual
  where
-  name = "for " ++ escapeString input
+  name = "for " <> escapeString input
   actual = f <$> parseMaybe p input
 
 invalidParseTest :: (Eq a, Show a) => Parser a -> Text -> TestTree
 invalidParseTest p input = testCase name $ Nothing @=? actual
  where
-  name = "for " ++ escapeString input
+  name = "for " <> escapeString input
   actual = parseMaybe p input
 
-stringLiteralTests :: [(Text, String)]
+stringLiteralTests :: [(Text, Text)]
 stringLiteralTests =
   [ ("\"Message of the day:\"", "Message of the day:")
   , ("\"\"", "")
