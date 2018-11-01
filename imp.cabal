@@ -14,6 +14,8 @@ category:            Compiler
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
+data-files:          stdlib/impstd.c
+                   , stdlib/impstd.h
 
 source-repository head
   type:                git
@@ -49,16 +51,19 @@ library
 executable impc
   hs-source-dirs:      src
   main-is:             Main.hs
+  other-modules:       Paths_imp
   ghc-options:         -rtsopts -Wall -fno-warn-name-shadowing
   build-depends:       base
                      , imp
                      , megaparsec == 6.*
-                     , pretty-simple
                      , text
                      , llvm-hs == 7.*
                      , bytestring
                      , optparse-applicative
                      , containers
+                     , temporary
+                     , filepath
+                     , process
   default-language:    Haskell2010
 
 test-suite test

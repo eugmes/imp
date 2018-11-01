@@ -6,10 +6,8 @@ import IMP.Parser
 import IMP.Codegen.Error
 import IMP.Emit
 import IMP.AST (Program)
-import Text.Pretty.Simple (pShow, pShowNoColor)
 import Data.Text (Text)
 import qualified Data.Text.IO as TIO
-import qualified Data.Text.Lazy.IO as TLIO
 import qualified Text.Megaparsec as P
 import LLVM
 import LLVM.Context
@@ -29,34 +27,73 @@ import Control.Exception
 import Control.Monad
 import Data.String
 import qualified Data.Map as Map
-import System.Environment (getProgName)
+import System.Environment (getProgName, lookupEnv)
+import System.IO.Temp (withSystemTempDirectory)
+import System.FilePath
+import System.Process
+import Data.Maybe
+import Paths_imp (getDataFileName)
 
-data UseColor = NoColor | UseColor deriving Show
-data Stage = ParseStage | CompileStage | TargetAsmStage deriving (Show, Ord, Eq, Enum, Bounded)
+getStdLibrarySource :: IO FilePath
+getStdLibrarySource = getDataFileName $ "stdlib" </> "impstd.c"
+
+getDefaultCCompiler :: IO FilePath
+getDefaultCCompiler = fromMaybe "clang" <$> lookupEnv "CC"
+
+data Stage = ParseStage
+           | AssemblyStage
+           | ObjectStage
+           | LinkStage
+           deriving (Show, Ord, Eq, Enum, Bounded)
+
+data OutputKind = NativeOutput
+                | LLVMOutput
+                deriving Show
 
 data Options = Options
   { inputFile :: FilePath
-  , useColor :: UseColor
   , lastStage :: Stage
+  , outputKind :: OutputKind
   , outputFile :: Maybe FilePath
   , optimizationLevel :: Maybe Word
   , triple :: Maybe String
   , cpu :: Maybe String
   , llvmOptions :: [String]
+  , cc :: Maybe FilePath
   } deriving Show
+
+getDefaultOutputExt :: Options -> String
+getDefaultOutputExt o =
+  case (lastStage o, outputKind o) of
+  (ParseStage, _) -> "tree"
+  (AssemblyStage, NativeOutput) -> "s"
+  (AssemblyStage, LLVMOutput) -> "ll"
+  (ObjectStage, NativeOutput) -> "o"
+  (ObjectStage, LLVMOutput) -> "bc"
+  (LinkStage, _) -> ""
+
+makeOutputFileName :: Options -> Maybe FilePath
+makeOutputFileName o =
+  case outputFile o of
+  Just "-" -> Nothing
+  Just name -> Just name
+  Nothing -> Just $ takeBaseName (inputFile o) <.> getDefaultOutputExt o
 
 options :: Opt.Parser Options
 options = Options
   <$> strArgument (metavar "FILE" <> help "Source file name")
-  <*> flag NoColor UseColor (short 'C' <> long "color" <> help "Enable color output")
   <*> ( flag' ParseStage (long "parse-only" <> help "Stop after parsing and dump the parse tree")
-    <|> flag' TargetAsmStage (short 'S' <> help "Emit target assembly")
-    <|> pure CompileStage )
+    <|> flag' AssemblyStage (short 'S' <> help "Emit assembly")
+    <|> flag' ObjectStage (short 'c' <> help "Emit object code/bitcode")
+    <|> pure LinkStage )
+  <*> ( flag' LLVMOutput (long "emit-llvm" <> help "Emit LLVM assembly code/bitcode")
+    <|> pure NativeOutput )
   <*> optional (option str (short 'o' <> metavar "FILE" <> help "Redirect output to FILE"))
   <*> optional (option auto (short 'O' <> metavar "LEVEL" <> help "Set optimization level"))
   <*> optional (option str (long "triple" <> metavar "TRIPLE" <> help "Target triple for code generation"))
   <*> optional (option str (long "cpu" <> metavar "CPU" <> help "Target a specific CPU type"))
   <*> many (option str (long "llvm" <> metavar "OPTION" <> help "Additional options to pass to LLVM"))
+  <*> optional (option str (long "cc" <> metavar "PATH" <> help "Use specified C compiler for linking"))
 
 withTargetFromOptions :: Options -> (TargetMachine -> IO a) -> IO a
 withTargetFromOptions o f = do
@@ -100,21 +137,31 @@ genCode o text name pgm = do
                        }
             withPassManager passes $ \pm -> do
               void $ runPassManager pm m
-              llstr <- case lastStage o of
-                         CompileStage -> moduleLLVMAssembly m
-                         TargetAsmStage -> moduleTargetAssembly target m
-                         _ -> error "Unexpected stage"
+              llstr <- case (lastStage o, outputKind o) of
+                (AssemblyStage, NativeOutput) -> moduleTargetAssembly target m
+                (AssemblyStage, LLVMOutput) -> moduleLLVMAssembly m
+                (ObjectStage, NativeOutput) -> moduleObject target m
+                (ObjectStage, LLVMOutput) -> moduleBitcode m
+                _ -> error "Unexpected stage"
               outputAssembly llstr
  where
-  outputAssembly = maybe C.putStr C.writeFile $ outputFile o
+  outputAssembly = maybe C.putStr C.writeFile $ makeOutputFileName o
 
 outputTree :: Options -> Program -> IO ()
-outputTree o tree = writeOutput $ showTree tree <> "\n"
+outputTree o tree = writeOutput $ show tree <> "\n"
  where
-  writeOutput = maybe TLIO.putStr TLIO.writeFile $ outputFile o
-  showTree = case useColor o of
-             NoColor -> pShowNoColor
-             UseColor -> pShow
+  writeOutput = maybe putStr writeFile $ makeOutputFileName o
+
+linkProgram :: Options -> FilePath -> FilePath -> IO ()
+linkProgram o objectFileName outputFileName = do
+  stdLibFile <- getStdLibrarySource
+  cc <- maybe getDefaultCCompiler pure $ cc o
+  let optOption = "-O" <> maybe "2" show (optimizationLevel o)
+      compilerArgs = [ "-o", outputFileName
+                     , objectFileName, stdLibFile
+                     , optOption
+                     , "-nopie" ] -- Needed when using GCC in some environments
+  callProcess cc compilerArgs
 
 run :: Options -> IO ()
 run o = do
@@ -125,12 +172,27 @@ run o = do
       putStr $ P.parseErrorPretty' text e
       exitFailure
     Right tree ->
+      let
+        runGenCode opts = genCode opts text fileName tree `catch` \(VerifyException msg) -> do
+           putStrLn "Verification exception:"
+           putStrLn msg
+           exitFailure
+      in
       case lastStage o of
         ParseStage -> outputTree o tree
-        _ -> genCode o text fileName tree `catch` \(VerifyException msg) -> do
-          putStrLn "Verification exception:"
-          putStrLn msg
-          exitFailure
+        LinkStage ->
+          case makeOutputFileName o of
+            Nothing -> do
+              putStrLn "Refusing to produce executable on standard output."
+              exitFailure
+            Just outputFileName ->
+              withSystemTempDirectory "imp" $ \dir -> do
+                let tmpExt = getDefaultOutputExt $ o { lastStage = ObjectStage }
+                    tmpFileName = dir </> takeBaseName fileName <.> tmpExt
+                    opts = o { lastStage = ObjectStage, outputFile = Just tmpFileName }
+                runGenCode opts
+                linkProgram o tmpFileName outputFileName
+        _ -> runGenCode o
 
 main :: IO ()
 main = execParser opts >>= run

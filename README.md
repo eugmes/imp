@@ -27,26 +27,13 @@ to build the program:
 After this IMP programs can be compiled by running:
 
 ```
-% stack exec -- impc -o hello.ll examples/hello.imp
-```
-
-This generates LLVM assembly file. Use LLVM tools to further compile to
-native assembler code or to produce an executable. An example using
-[clang](https://clang.llvm.org):
-
-```
-% clang -o hello hello.ll stdlib/impstd.c
+% stack exec -- impc examples/hello.imp
 % ./hello
 Hello World!
 ```
 
-Alternatively programs can be compiled via native assembly:
-```
-% stack exec -- impc -S -o hello.s examples/hello.imp
-% gcc -o hello hello.s stdlib/impstd.c
-% ./hello
-Hello World!
-```
+This uses [clang](https://clang.llvm.org). To specify a different compiler,
+use `--cc` command line option or `CC` environment variable.
 
 Extensions
 ----------
