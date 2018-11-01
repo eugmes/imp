@@ -59,11 +59,9 @@ codegenSub' name retty params vars body = do
   args = toSig params
   cg = mdo
     _ <- block "entry"
-    retval <- case retty of
-                Nothing -> return Nothing
-                Just t -> do
-                  op <- alloca ".return" $ typeToLLVM t
-                  return $ Just (t, op)
+    retval <- forM retty $ \t -> do
+      op <- alloca ".return" $ typeToLLVM t
+      return (t, op)
 
     setExitBlock retval exit
 
@@ -77,9 +75,7 @@ codegenSub' name retty params vars body = do
     br exit
 
     exit <- block "exit"
-    case retval of
-      Nothing -> ret Nothing
-      Just (ty, op) -> load (typeToLLVM ty) op >>= ret . Just
+    ret =<< mapM (\(ty, op) -> load (typeToLLVM ty) op) retval
 
 codegenSub :: I.Subroutine -> GlobalCodegen ()
 codegenSub (I.Procedure name params vars body) = do
