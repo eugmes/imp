@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecursiveDo #-}
 
 module IMP.Emit ( CodegenOptions(..)
                 , compileProgram
@@ -56,10 +57,8 @@ codegenSub' name retty params vars body = do
   defineSub (unLoc name) retty args blocks
  where
   args = toSig params
-  cg = do
-    entry <- addBlock "entry"
-    exit <- addBlock "exit"
-    setBlock entry
+  cg = mdo
+    _ <- block "entry"
     retval <- case retty of
                 Nothing -> return Nothing
                 Just t -> do
@@ -77,7 +76,7 @@ codegenSub' name retty params vars body = do
     mapM_ (withLoc codegenStatement) body
     br exit
 
-    setBlock exit
+    exit <- block "exit"
     case retval of
       Nothing -> ret Nothing
       Just (ty, op) -> load (typeToLLVM ty) op >>= ret . Just
@@ -118,10 +117,9 @@ typeCheckExpression t = withLoc (codegenExpression >=> check)
 maybeGenBlock :: T.Text -> Name -> I.Statements -> SubCodegen Name
 maybeGenBlock _ contName [] = return contName
 
-maybeGenBlock newTemlate contName stmts = do
+maybeGenBlock newTemlate contName stmts = mdo
   e <- entry
-  newName <- addBlock newTemlate
-  setBlock newName
+  newName <- block newTemlate
   mapM_ (withLoc codegenStatement) stmts
   br contName
 
@@ -135,8 +133,8 @@ maybeGenBlock newTemlate contName stmts = do
 gotoBlock :: Name -> SubCodegen ()
 gotoBlock bname = do
   br bname
-  cont <- addBlock "discard"
-  setBlock cont
+  _ <- block "discard"
+  return ()
 
 -- | Generate and typecheck subroutine arguments
 --
@@ -149,36 +147,35 @@ codegenArgs args exps = do
 
 codegenStatement :: I.Statement -> SubCodegen ()
 
-codegenStatement (I.IfStatement condPart elseStmts) = do
-  exitB <- addBlock "if.exit"
+codegenStatement (I.IfStatement condPart elseStmts) = mdo
   mapM_ (emitCondPart exitB) condPart
   mapM_ (withLoc codegenStatement) elseStmts
   br exitB
 
-  setBlock exitB
+  exitB <- block "if.exit"
+  return ()
  where
   check = checkBoolean NonBooleanIfCondition
 
-  emitCondPart exitB (cond, stmts) = do
+  emitCondPart exitB (cond, stmts) = mdo
     op <- withLoc (codegenExpression >=> check) cond
+
     ifB <- maybeGenBlock "then" exitB stmts
-    elseB <- addBlock "else"
-
     cbr op ifB elseB
-    setBlock elseB
 
-codegenStatement (I.WhileStatement cond body) = do
-  whileCondB <- addBlock "while.cond"
-  whileExitB <- addBlock "while.exit"
+    elseB <- block "else"
+    return ()
+
+codegenStatement (I.WhileStatement cond body) = mdo
   br whileCondB
 
-  setBlock whileCondB
-
+  whileCondB <- block "while.cond"
   op <- withLoc (codegenExpression >=> check) cond
   whileLoopB <- withLoopExit whileExitB $ maybeGenBlock "while.loop" whileCondB body
   cbr op whileLoopB whileExitB
 
-  setBlock whileExitB
+  whileExitB <- block "while.exit"
+  return ()
  where
    check = checkBoolean NonBooleanWhileCondition
 
@@ -327,17 +324,15 @@ codegenExpression (I.CallExpression name exps) = do
 -- TODO Adjust weights of branches
 genDivOp :: I.Type -> (Operand -> Operand -> SubCodegen (I.Type, Operand))
             -> Operand -> Operand -> SubCodegen (I.Type, Operand)
-genDivOp ty fn leftOp rightOp = do
+genDivOp ty fn leftOp rightOp = mdo
   condOp <- instr boolean $ AST.ICmp IP.EQ rightOp (constZero $ typeToLLVM ty) []
-  divB <- addBlock "div"
-  exB <- addBlock "div.ex"
   cbr condOp exB divB
 
-  setBlock exB
+  exB <- block "div.ex"
   apiProcCall CallDivideByZeroEx []
   unreachable
 
-  setBlock divB
+  divB <- block "div"
   fn leftOp rightOp
 
 -- | Generate integer arithmetic operations with overflow check.
@@ -345,18 +340,16 @@ genDivOp ty fn leftOp rightOp = do
 -- TODO Make check optional
 -- TODO Adjust weights of branches
 genArithCall :: I.Type -> StandardCall -> Operand -> Operand -> SubCodegen (I.Type, Operand)
-genArithCall ty c leftOp rightOp = do
+genArithCall ty c leftOp rightOp = mdo
   op <- apiFunCall c [leftOp, rightOp]
   obit <- instr boolean $ ExtractValue op [1] []
-  arithB <- addBlock "arith"
-  exB <- addBlock "arith.ex"
   cbr obit exB arithB
 
-  setBlock exB
+  exB <- block "arith.ex"
   apiProcCall CallIntegerOverflowEx []
   unreachable
 
-  setBlock arithB
+  arithB <- block "arith"
   res <- instr (typeToLLVM ty) $ ExtractValue op [0] []
   return (ty, res)
 

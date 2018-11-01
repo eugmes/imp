@@ -66,6 +66,7 @@ newtype GlobalCodegen a = GlobalCodegen
                         } deriving ( Functor
                                    , Applicative
                                    , Monad
+                                   , MonadFix
                                    , MonadState CodegenState
                                    , MonadError (Located CodegenError))
 

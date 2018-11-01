@@ -6,7 +6,7 @@ module IMP.Codegen.SubCodegen
     ( SubCodegen
     , getLoopExitBlock
     , execSubCodegen
-    , addBlock
+    , block
     , alloca
     , store
     , load
@@ -90,6 +90,7 @@ newtype SubCodegen a = SubCodegen
                      } deriving ( Functor
                                 , Applicative
                                 , Monad
+                                , MonadFix
                                 , MonadError (Located CodegenError)
                                 , MonadState CodegenState
                                 )
@@ -167,20 +168,22 @@ exit = do
       return (bname, t)
     Nothing -> throwLocatedError $ InternalError "Exit block was not set."
 
-addBlock :: T.Text -> SubCodegen Name
-addBlock bname = do
+block :: T.Text -> SubCodegen Name
+block bname = do
   bls <- gets blocks
   ix <- gets blockCount
   nms <- gets names
 
   let new = emptyBlock ix
       (qname, supply) = uniqueName bname nms
+      newName = mkName qname
 
-  modify $ \s -> s { blocks = Map.insert (mkName qname) new bls
+  modify $ \s -> s { blocks = Map.insert newName new bls
                    , blockCount = ix + 1
                    , names = supply
+                   , currentBlock = newName
                    }
-  return $ mkName qname
+  return newName
 
 setBlock :: Name -> SubCodegen ()
 setBlock bname = modify $ \s -> s { currentBlock = bname }
