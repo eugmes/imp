@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE LambdaCase #-}
 
 module IMP.Emit ( CodegenOptions(..)
                 , compileProgram
@@ -126,8 +127,8 @@ maybeGenBlock newTemlate contName stmts = mdo
 --
 -- Sets a new active block. Operations emitted into this
 -- block will be discarded
-gotoBlock :: Name -> SubCodegen ()
-gotoBlock bname = do
+goto :: Name -> SubCodegen ()
+goto bname = do
   br bname
   _ <- block "discard"
   return ()
@@ -216,25 +217,20 @@ codegenStatement (I.OutputStatement (I.Str str)) = do
 
 codegenStatement I.NullStatement = return ()
 
-codegenStatement I.BreakStatement = do
-  loopEx <- getLoopExitBlock
-  case loopEx of
-    Nothing -> throwLocatedError BreakOutsideOfLoop
-    Just bname -> gotoBlock bname
+codegenStatement I.BreakStatement =
+  getLoopExitBlock >>= maybe (throwLocatedError BreakOutsideOfLoop) goto
 
-codegenStatement I.ReturnStatement = do
-  ex <- exit
-  case ex of
+codegenStatement I.ReturnStatement =
+  exit >>= \case
     (_, Just _) -> throwLocatedError VoidReturnInFunction
-    (bname, Nothing) -> gotoBlock bname
+    (bname, Nothing) -> goto bname
 
-codegenStatement (I.ReturnValStatement exp) = do
-  ex <- exit
-  case ex of
+codegenStatement (I.ReturnValStatement exp) =
+  exit >>= \case
     (bname, Just (retty, ptr)) -> do
       op <- typeCheckExpression retty exp
       store ptr op
-      gotoBlock bname
+      goto bname
     (_, Nothing) -> throwLocatedError NonVoidReturnInProcedure
 
 codegenStatement I.HaltStatement = apiProcCall CallHalt []

@@ -1,5 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
+
 -- | Gode generation for subroutines.
 
 module IMP.Codegen.SubCodegen
@@ -105,6 +107,7 @@ instance WithLoc SubCodegen where
 
   currentLoc = gets location
 
+-- TODO ensure location is set correctly
 liftG :: GlobalCodegen a -> SubCodegen a
 liftG = SubCodegen . lift
 
@@ -143,10 +146,7 @@ newCodegenState = do
               }
 
 execSubCodegen :: SubCodegen a -> GlobalCodegen [BasicBlock]
-execSubCodegen m = do
-  s <- newCodegenState
-  s' <- execStateT (runSubCodegen m) s
-  createBlocks s'
+execSubCodegen m = newCodegenState >>= execStateT (runSubCodegen m) >>= createBlocks
 
 withLoopExit :: Name -> SubCodegen a -> SubCodegen a
 withLoopExit newExitB action = do
@@ -160,9 +160,8 @@ entry :: SubCodegen Name
 entry = gets currentBlock
 
 exit :: SubCodegen (Name, Maybe (I.Type, Operand))
-exit = do
-  b <- gets exitBlock
-  case b of
+exit =
+  gets exitBlock >>= \case
     Just bname -> do
       t <- gets subReturn
       return (bname, t)
