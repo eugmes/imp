@@ -42,7 +42,6 @@ import qualified LLVM.AST.CallingConvention as CC
 import qualified Data.Map.Strict as Map
 import qualified LLVM.AST.FunctionAttribute as FA
 import Control.Monad.State
-import Control.Monad.Reader
 import Control.Monad.Except
 import Data.List
 import Data.Function
@@ -51,12 +50,6 @@ import Text.Printf
 import TextShow (showt)
 
 type Names = Map.Map T.Text Int
-
-data CodegenEnv = CodegenEnv
-                { location :: SourcePos
-                , loopExitBlock :: Maybe Name
-                -- ^ Exit block for innermost loop
-                } deriving Show
 
 data CodegenState = CodegenState
                   { currentBlock :: Name
@@ -75,6 +68,9 @@ data CodegenState = CodegenState
                   -- ^ Count of unnamed instructions
                   , names :: Names
                   -- ^ Name supply
+                  , location :: SourcePos
+                  , loopExitBlock :: Maybe Name
+                  -- ^ Exit block for innermost loop
                   } deriving Show
 
 data BlockState = BlockState
@@ -90,21 +86,26 @@ emptyBlock :: Int -> BlockState
 emptyBlock ix = BlockState ix [] Nothing
 
 newtype SubCodegen a = SubCodegen
-                     { runSubCodegen :: ReaderT CodegenEnv (StateT CodegenState GlobalCodegen) a
+                     { runSubCodegen :: StateT CodegenState GlobalCodegen a
                      } deriving ( Functor
                                 , Applicative
                                 , Monad
                                 , MonadError (Located CodegenError)
-                                , MonadReader CodegenEnv
                                 , MonadState CodegenState
                                 )
 
 instance WithLoc SubCodegen where
-  withNewLoc p = local (\e -> e { location = p })
-  currentLoc = reader location
+  withNewLoc pos action = do
+    oldPos <- gets location
+    modify (\s -> s { location = pos })
+    result <- action
+    modify (\s -> s { location = oldPos })
+    return result
+
+  currentLoc = gets location
 
 liftG :: GlobalCodegen a -> SubCodegen a
-liftG = SubCodegen . lift . lift
+liftG = SubCodegen . lift
 
 instance MonadCodegen SubCodegen where
   emitString = liftG . emitString
@@ -125,6 +126,7 @@ makeBlock (l, BlockState _ s t) =
 newCodegenState :: GlobalCodegen CodegenState
 newCodegenState = do
   syms <- getSymtab
+  pos <- currentLoc
 
   return CodegenState
               { currentBlock = mkName ""
@@ -135,25 +137,23 @@ newCodegenState = do
               , blockCount = 1
               , count = 0
               , names = Map.empty
+              , location = pos
+              , loopExitBlock = Nothing
               }
-
-newCodegenEnv :: GlobalCodegen CodegenEnv
-newCodegenEnv = do
-  pos <- currentLoc
-  return CodegenEnv
-                { loopExitBlock = Nothing
-                , location = pos
-                }
 
 execSubCodegen :: SubCodegen a -> GlobalCodegen [BasicBlock]
 execSubCodegen m = do
-  env <- newCodegenEnv
   s <- newCodegenState
-  s' <- execStateT (runReaderT (runSubCodegen m) env) s
+  s' <- execStateT (runSubCodegen m) s
   createBlocks s'
 
 withLoopExit :: Name -> SubCodegen a -> SubCodegen a
-withLoopExit newExitB = local (\e -> e { loopExitBlock = Just newExitB })
+withLoopExit newExitB action = do
+  oldExitB <- gets loopExitBlock
+  modify (\s -> s { loopExitBlock = Just newExitB })
+  result <- action
+  modify (\s -> s { loopExitBlock = oldExitB })
+  return result
 
 entry :: SubCodegen Name
 entry = gets currentBlock
@@ -309,4 +309,4 @@ apiProcCall c args = do
   attrs = stdCallAttrs c
 
 getLoopExitBlock :: SubCodegen (Maybe Name)
-getLoopExitBlock = reader loopExitBlock
+getLoopExitBlock = gets loopExitBlock

@@ -33,7 +33,6 @@ import qualified Data.Set as Set
 import LLVM.AST.DataLayout
 import LLVM.Prelude (ShortByteString)
 import Control.Monad.State
-import Control.Monad.Reader
 import Control.Monad.Except
 import Data.String
 import qualified Data.Text as T
@@ -53,30 +52,32 @@ data CodegenOptions = CodegenOptions
                     , targetTriple :: ShortByteString
                     } deriving Show
 
-newtype CodegenEnv = CodegenEnv
-                   { location :: SourcePos
-                   } deriving Show
-
 data CodegenState = CodegenState
                   { currentModule :: AST.Module
                   , symtab :: SymbolTable
                   , nextStringNum :: Word
                   , usedCalls :: Set.Set StandardCall
                   , nextMetadataNum :: Word
+                  , location :: SourcePos
                   } deriving Show
 
 newtype GlobalCodegen a = GlobalCodegen
-                        { runGlobalCodegen :: ReaderT CodegenEnv (StateT CodegenState (Except (Located CodegenError))) a
+                        { runGlobalCodegen :: StateT CodegenState (Except (Located CodegenError)) a
                         } deriving ( Functor
                                    , Applicative
                                    , Monad
-                                   , MonadReader CodegenEnv
                                    , MonadState CodegenState
                                    , MonadError (Located CodegenError))
 
 instance WithLoc GlobalCodegen where
-  withNewLoc p = local (\e -> e { location = p })
-  currentLoc = reader location
+  withNewLoc pos action = do
+    oldPos <- gets location
+    modify (\s -> s {location = pos})
+    result <- action
+    modify (\s -> s {location = oldPos})
+    return result
+
+  currentLoc = gets location
 
 instance MonadCodegen GlobalCodegen where
   emitString = globalEmitString
@@ -84,12 +85,11 @@ instance MonadCodegen GlobalCodegen where
 
 execGlobalCodegen :: CodegenOptions -> GlobalCodegen a -> Either (Located CodegenError) AST.Module
 execGlobalCodegen opts m =
-  fmap currentModule $ runExcept $ execStateT (runReaderT (runGlobalCodegen m') env) s
+  fmap currentModule $ runExcept $ execStateT (runGlobalCodegen m') s
  where
   m' = m >> emitCompilerInfo
   md = emptyModule opts
-  s = CodegenState md Tab.empty 0 Set.empty 0
-  env = CodegenEnv { location = initialPos $ sourceFileName opts }
+  s = CodegenState md Tab.empty 0 Set.empty 0 (initialPos $ sourceFileName opts)
 
 emptyModule :: CodegenOptions -> AST.Module
 emptyModule opts =
