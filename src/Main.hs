@@ -166,7 +166,7 @@ linkProgram o objectFileName outputFileName = do
       compilerArgs = [ "-o", outputFileName
                      , objectFileName, stdLibFile
                      , optOption
-                     , "-nopie" ] -- Needed when using GCC in some environments
+                     , "-no-pie" ] -- Needed when using GCC in some environments
   callProcess cc compilerArgs
 
 run :: Options -> IO ()
