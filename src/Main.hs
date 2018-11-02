@@ -44,7 +44,7 @@ data Stage = ParseStage
            | AssemblyStage
            | ObjectStage
            | LinkStage
-           deriving (Show, Ord, Eq, Enum, Bounded)
+           deriving Show
 
 data OutputKind = NativeOutput
                 | LLVMOutput
@@ -114,6 +114,16 @@ setLLVMCommandLineOptions opts = do
   let args = map fromString $ prog : opts
   parseCommandLineOptions args Nothing
 
+-- TODO: Use some type class for this
+showingErrorsBy :: Either e a -> (e -> String) -> IO a
+showingErrorsBy v handler =
+  case v of
+    Left err -> do
+      putStrLn $ handler err
+      exitFailure
+    Right r ->
+      return r
+
 genCode :: Options -> Text -> FilePath -> Program -> IO ()
 genCode o text name pgm = do
   setLLVMCommandLineOptions $ llvmOptions o
@@ -123,29 +133,25 @@ genCode o text name pgm = do
       targetTriple <- getTargetMachineTriple target
       let opts = CodegenOptions name dataLayout targetTriple
 
-      case compileProgram opts pgm of
-        Left err -> do
-          putStrLn $ locatedErrorPretty text err
-          exitFailure
-        Right ast ->
-          withModuleFromAST context ast $ \m -> do
-            verify m
-            let passes = defaultCuratedPassSetSpec
-                       { PM.optLevel = optimizationLevel o
-                       , PM.dataLayout = Just dataLayout
-                       , PM.targetMachine = Just target
-                       }
-            withPassManager passes $ \pm -> do
-              void $ runPassManager pm m
-              llstr <- case (lastStage o, outputKind o) of
-                (AssemblyStage, NativeOutput) -> moduleTargetAssembly target m
-                (AssemblyStage, LLVMOutput) -> moduleLLVMAssembly m
-                (ObjectStage, NativeOutput) -> moduleObject target m
-                (ObjectStage, LLVMOutput) -> moduleBitcode m
-                _ -> error "Unexpected stage"
-              outputAssembly llstr
+      ast <- compileProgram opts pgm `showingErrorsBy` locatedErrorPretty text
+      withModuleFromAST context ast $ \m -> do
+        verify m
+        let passes = defaultCuratedPassSetSpec
+                   { PM.optLevel = optimizationLevel o
+                   , PM.dataLayout = Just dataLayout
+                   , PM.targetMachine = Just target
+                   }
+        withPassManager passes $ \pm -> do
+          void $ runPassManager pm m
+          llstr <- case (lastStage o, outputKind o) of
+            (AssemblyStage, NativeOutput) -> moduleTargetAssembly target m
+            (AssemblyStage, LLVMOutput) -> moduleLLVMAssembly m
+            (ObjectStage, NativeOutput) -> moduleObject target m
+            (ObjectStage, LLVMOutput) -> moduleBitcode m
+            _ -> error "Unexpected stage"
+          emitOutput llstr
  where
-  outputAssembly = maybe C.putStr C.writeFile $ makeOutputFileName o
+  emitOutput = maybe C.putStr C.writeFile $ makeOutputFileName o
 
 outputTree :: Options -> Program -> IO ()
 outputTree o tree = writeOutput $ show tree <> "\n"
@@ -167,32 +173,26 @@ run :: Options -> IO ()
 run o = do
   let fileName = inputFile o
   text <- TIO.readFile fileName
-  case P.runParser parser fileName text of
-    Left e -> do
-      putStr $ P.parseErrorPretty' text e
-      exitFailure
-    Right tree ->
-      let
-        runGenCode opts = genCode opts text fileName tree `catch` \(VerifyException msg) -> do
-           putStrLn "Verification exception:"
-           putStrLn msg
-           exitFailure
-      in
-      case lastStage o of
-        ParseStage -> outputTree o tree
-        LinkStage ->
-          case makeOutputFileName o of
-            Nothing -> do
-              putStrLn "Refusing to produce executable on standard output."
-              exitFailure
-            Just outputFileName ->
-              withSystemTempDirectory "imp" $ \dir -> do
-                let tmpExt = getDefaultOutputExt $ o { lastStage = ObjectStage }
-                    tmpFileName = dir </> takeBaseName fileName <.> tmpExt
-                    opts = o { lastStage = ObjectStage, outputFile = Just tmpFileName }
-                runGenCode opts
-                linkProgram o tmpFileName outputFileName
-        _ -> runGenCode o
+  tree <- P.runParser parser fileName text `showingErrorsBy` P.parseErrorPretty' text
+  let runGenCode opts = genCode opts text fileName tree `catch` \(VerifyException msg) -> do
+        putStrLn "Verification exception:"
+        putStrLn msg
+        exitFailure
+  case lastStage o of
+    ParseStage -> outputTree o tree
+    LinkStage ->
+      case makeOutputFileName o of
+        Nothing -> do
+          putStrLn "Refusing to produce executable on standard output."
+          exitFailure
+        Just outputFileName ->
+          withSystemTempDirectory "imp" $ \dir -> do
+            let tmpExt = getDefaultOutputExt $ o { lastStage = ObjectStage }
+                tmpFileName = dir </> takeBaseName fileName <.> tmpExt
+                opts = o { lastStage = ObjectStage, outputFile = Just tmpFileName }
+            runGenCode opts
+            linkProgram o tmpFileName outputFileName
+    _ -> runGenCode o
 
 main :: IO ()
 main = execParser opts >>= run
