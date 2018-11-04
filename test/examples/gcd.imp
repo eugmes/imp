@@ -1,7 +1,7 @@
 -- FIXME is_even is not allowed here
 function iseven (a : integer) return boolean is
 begin
-  return (a / 2) * 2 == a;
+  return a % 2 == 0;
 end iseven;
 
 function gcd (a, b : integer) return integer is
