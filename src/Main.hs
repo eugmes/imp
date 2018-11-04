@@ -38,7 +38,7 @@ getStdLibrarySource :: IO FilePath
 getStdLibrarySource = getDataFileName $ "stdlib" </> "impstd.c"
 
 getDefaultCCompiler :: IO FilePath
-getDefaultCCompiler = fromMaybe "clang" <$> lookupEnv "CC"
+getDefaultCCompiler = fromMaybe "cc" <$> lookupEnv "CC"
 
 data Stage = ParseStage
            | AssemblyStage
