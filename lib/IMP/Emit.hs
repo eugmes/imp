@@ -76,7 +76,12 @@ codegenSub' name retty params vars body = do
     br exit
 
     exit <- block "exit"
-    ret =<< mapM (\(ty, op) -> load (typeToLLVM ty) op) retval
+    if unLoc name == I.ID "main"
+      then do
+        apiProcCall CallHalt []
+        unreachable
+      else
+        ret =<< mapM (\(ty, op) -> load (typeToLLVM ty) op) retval
 
 codegenSub :: I.Subroutine -> GlobalCodegen ()
 codegenSub (I.Procedure name params vars body) = do
