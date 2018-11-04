@@ -32,7 +32,6 @@ void _IMP_output_string(const char *s)
 
 void _IMP_halt(void)
 {
-    fprintf(stderr, "IMP HALTED\n");
     exit(0);
 }
 
