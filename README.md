@@ -27,13 +27,13 @@ to build the program:
 After this IMP programs can be compiled by running:
 
 ```
-% stack exec -- impc examples/hello.imp
+% stack exec -- impc test/examples/hello.imp
 % ./hello
 Hello World!
 ```
 
-This uses [clang](https://clang.llvm.org). To specify a different compiler,
-use `--cc` command line option or `CC` environment variable.
+This runs `cc`. To specify a different compiler, use `--cc` command line option
+or `CC` environment variable.
 
 Extensions
 ----------
