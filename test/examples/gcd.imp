@@ -1,0 +1,40 @@
+-- FIXME is_even is not allowed here
+function iseven (a : integer) return boolean is
+begin
+  return (a / 2) * 2 == a;
+end iseven;
+
+function gcd (a, b : integer) return integer is
+  var d : integer;
+begin
+  d = 1;
+
+  while iseven (a) and iseven(b) loop
+    a = a / 2;
+    b = b / 2;
+    d = d * 2;
+  end loop;
+
+  while a # b loop
+    if iseven (a) then
+      a = a / 2;
+    elsif iseven (b) then
+      b = b / 2;
+    elsif a > b then
+      a = (a - b) / 2;
+    else
+      b = (b - a) / 2;
+    end if;
+  end loop;
+
+  return a * d;
+end gcd;
+
+procedure main () is
+   var a, b, c : integer;
+begin
+   output ("Firsr number: "); input (a);
+   output ("Second number: "); input (b);
+   c = gcd (a, b);
+   output (c); newline;
+end main;

@@ -33,6 +33,7 @@ library
                      , IMP.Emit
                      , IMP.SymbolTable
                      , IMP.SourceLoc
+                     , Test.Tasty.IMP
   other-modules:       Paths_imp
   ghc-options:         -Wall -fno-warn-name-shadowing
   build-depends:       base >= 4.7 && < 5
@@ -46,6 +47,11 @@ library
                      , utf8-string
                      , composition-extra
                      , text-show
+                     , tasty
+                     , temporary
+                     , process-extras
+                     , filepath
+                     , stringbuilder
   default-language:    Haskell2010
 
 executable impc
@@ -80,6 +86,7 @@ test-suite testsuite
   other-modules:
     IMP.Test.Parser
     IMP.Test.Tests
+    CompilerTests
   hs-source-dirs: test
   main-is: TestSuite.hs
   default-language: Haskell2010
