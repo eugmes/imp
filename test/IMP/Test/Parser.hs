@@ -6,6 +6,7 @@ import Test.Tasty.HUnit
 
 import IMP.Parser
 import IMP.SourceLoc
+import IMP.AST
 
 import Data.Text (Text, unpack)
 import Text.Megaparsec
@@ -61,7 +62,34 @@ stringTests = map f stringLiteralTests ++ map f' invalidStringLiteralTests
   f (i, r) = validParseTest stringLiteral unLoc i r
   f' = invalidParseTest stringLiteral
 
+validIdentifierTests :: [(Text, Text)]
+validIdentifierTests =
+  [ ("Count", "count")
+  , ("X", "x")
+  , ("Get_Symbol", "get_symbol")
+  , ("Ethelyn", "ethelyn")
+  , ("Marion", "marion")
+  , ("Snobol_4", "snobol_4")
+  , ("X1", "x1")
+  , ("Page_Count", "page_count")
+  , ("Store_Next_Item", "store_next_item")
+  , ("Πλάτω", "πλάτω")
+  , ("Чайковский", "чайковский")
+  , ("θ", "θ")
+  , ("φ", "φ")
+  ]
+
+invalidIdentifierTests :: [Text]
+invalidIdentifierTests = [ "123", "begin", "two__underscores", "ends_with_undercore_" ]
+
+identifierTests :: [TestTree]
+identifierTests = map f validIdentifierTests ++ map f' invalidIdentifierTests
+ where
+  f (i, r) = validParseTest identifier (getID . unLoc) i r
+  f' = invalidParseTest identifier
+
 tests :: TestTree
 tests = testGroup "Parser"
   [ testGroup "stringLiteral" stringTests
+  , testGroup "identifier" identifierTests
   ]

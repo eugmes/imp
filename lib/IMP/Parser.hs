@@ -5,6 +5,7 @@ module IMP.Parser
   , parser
   -- Other exports for testing
   , stringLiteral
+  , identifier
   ) where
 
 import IMP.AST
