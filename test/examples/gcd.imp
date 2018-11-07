@@ -1,24 +1,23 @@
--- FIXME is_even is not allowed here
-function iseven (a : integer) return boolean is
+function is_even (a : integer) return boolean is
 begin
   return a % 2 == 0;
-end iseven;
+end is_even;
 
 function gcd (a, b : integer) return integer is
   var d : integer;
 begin
   d = 1;
 
-  while iseven (a) and iseven(b) loop
+  while is_even (a) and is_even(b) loop
     a = a / 2;
     b = b / 2;
     d = d * 2;
   end loop;
 
   while a # b loop
-    if iseven (a) then
+    if is_even (a) then
       a = a / 2;
-    elsif iseven (b) then
+    elsif is_even (b) then
       b = b / 2;
     elsif a > b then
       a = (a - b) / 2;

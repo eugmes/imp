@@ -57,6 +57,7 @@ stringLiteral = lexeme stringLiteral'
   stringElement = try (char '"' *> char '"')
               <|> satisfy (\c -> isPrint c && c /= '"')
 
+-- FIXME merge with identifier
 rword :: T.Text -> Parser ()
 rword w = void $ lexeme' (string' w *> notFollowedBy alphaNumChar)
 
@@ -70,16 +71,64 @@ rws = [ "and", "begin", "boolean", "break", "call", "else", "elsif", "end"
       , "procedure", "return", "then", "true", "var", "while"
       ]
 
+isIdentifierStart :: Char -> Bool
+isIdentifierStart = (`elem` cats) . generalCategory
+ where cats = [ UppercaseLetter
+              , LowercaseLetter
+              , TitlecaseLetter
+              , ModifierLetter
+              , OtherLetter
+              , LetterNumber
+              ]
+
+isIdentifierExtend :: Char -> Bool
+isIdentifierExtend = (`elem` cats) . generalCategory
+  where cats = [ NonSpacingMark
+               , SpacingCombiningMark
+               , DecimalNumber
+               , ConnectorPunctuation
+               ]
+
+isIdentifierCont :: Char -> Bool
+isIdentifierCont c = isIdentifierStart c || isIdentifierExtend c
+
+data IdentCheckState = IdentCheckOther
+                     | IdentCheckPunctConn
+                     | IdentCheckTwoPunctConn
+
+instance Semigroup IdentCheckState where
+  IdentCheckOther <> st = st
+  IdentCheckPunctConn <> IdentCheckOther = IdentCheckOther
+  IdentCheckPunctConn <> _ = IdentCheckTwoPunctConn
+  IdentCheckTwoPunctConn <> _ = IdentCheckTwoPunctConn
+
+instance Monoid IdentCheckState where
+  mempty = IdentCheckOther
+
 idName :: Parser (Located T.Text)
 idName = do
-  tok <- lookAhead p
-  check tok
+  -- FIXME look ahead to keep error position
+  name <- lookAhead p
+  check name
   lexeme p
  where
-  p = T.pack <$> ((:) <$> letterChar <*> many alphaNumChar)
+  identifierStart = satisfy isIdentifierStart <?> "identifier start"
+  identifierCont = takeWhileP (Just "identifier continuation") isIdentifierCont
+  p = T.cons <$> identifierStart <*> identifierCont
+
   check :: T.Text -> Parser ()
-  check x = when (T.toCaseFold x `elem` rws) $
-              customFailure $ RWordAsIdentifier x
+  check name = do
+    when (T.toCaseFold name `elem` rws) $
+      customFailure $ RWordAsIdentifier name
+    case T.foldl ((. checkChar) . (<>)) mempty name of
+      IdentCheckOther -> pure ()
+      IdentCheckPunctConn -> customFailure $ IdentifierEndsWithPunctConn name
+      IdentCheckTwoPunctConn -> customFailure $ IdentifierContainsTwoPunctConn name
+
+  checkChar c =
+    case generalCategory c of
+      ConnectorPunctuation -> IdentCheckPunctConn
+      _ -> IdentCheckOther
 
 comma, colon, semicolon, equals :: Parser ()
 comma = symbol' ","
