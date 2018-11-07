@@ -78,7 +78,7 @@ idName = do
  where
   p = T.pack <$> ((:) <$> letterChar <*> many alphaNumChar)
   check :: T.Text -> Parser ()
-  check x = when (T.toLower x `elem` rws) $
+  check x = when (T.toCaseFold x `elem` rws) $
               customFailure $ RWordAsIdentifier x
 
 comma, colon, semicolon, equals :: Parser ()
@@ -88,7 +88,7 @@ semicolon = symbol' ";"
 equals = symbol' "="
 
 identifier :: Parser (Located ID)
-identifier = ID . T.toLower <$$> idName <?> "identifier"
+identifier = ID . T.toCaseFold <$$> idName <?> "identifier"
 
 typeName :: Parser (Located Type)
 typeName  = located (IntegerType <$ rword "integer")
