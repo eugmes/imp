@@ -29,7 +29,7 @@ class Applicative f => WithLoc f where
   -- | Pure value containing current location.
   currentLoc :: f SourcePos
 
--- | The expression (@'withLoc' f x@) passes from @x@ to the
+-- | The expression (@'withLoc' f x@) passes the value from @x@ to the
 -- function @f@ and returns computation with location from @x@.
 withLoc :: WithLoc f => (t -> f a) -> Located t -> f a
 withLoc f (Located p a) = withNewLoc p (f a)
