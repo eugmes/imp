@@ -237,7 +237,7 @@ statement = ifStatement
         <|> WhileStatement <$> (rword "while" *> located expression <* rword "loop") <*> statements <* rwords ["end", "loop"]
         <|> CallStatement <$> (rword "call" *> identifier) <*> parens expressions
         <|> InputStatement <$> (rword "input" *> parens identifier)
-        <|> OutputStatement <$> (rword "output" *> parens expressionOrString)
+        <|> OutputStatement <$> (rword "output" *> parens (located expression))
         <|> NullStatement <$ rword "null"
         <|> BreakStatement <$ rword "break"
         <|> returnStatement
@@ -269,10 +269,6 @@ returnStatement = rword "return" *> (ReturnValStatement <$> located expression <
 statements :: Parser Statements
 statements = located statement `endBy` semicolon
 
-expressionOrString :: Parser ExpressionOrString
-expressionOrString = Str <$> stringLiteral
-                 <|> Exp <$> located expression
-
 expression :: Parser Expression
 expression = try (BinOpExp <$> located simpleExpression <*> relOp <*> located simpleExpression)
          <|> simpleExpression
@@ -291,6 +287,7 @@ term = try (BinOpExp <$> located factor <*> mulOp <*> located factor)
 factor :: Parser Expression
 factor = UnOpExp <$> unaryOp <*> located factor
      <|> NumberExpression <$> number
+     <|> StringLiteralExpression <$> stringLiteral
      <|> BoolExpression <$> bool
      <|> parens expression
      <|> try (CallExpression <$> identifier <*> parens expressions)

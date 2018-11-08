@@ -209,16 +209,13 @@ codegenStatement (I.InputStatement name) = do
       store ptr op
     _ -> throwLocatedError InputError
 
-codegenStatement (I.OutputStatement (I.Exp exp)) = do
+codegenStatement (I.OutputStatement exp) = do
   (ty, op) <- withLoc codegenExpression exp
   let api = case ty of
             I.IntegerType -> CallOutputInteger
             I.BooleanType -> CallOutputBoolean
+            I.StringType -> CallOutputString
   apiProcCall api [op]
-
-codegenStatement (I.OutputStatement (I.Str str)) = do
-  opPtr <- emitString $ unLoc str
-  apiProcCall CallOutputString [opPtr]
 
 codegenStatement I.NullStatement = return ()
 
@@ -258,12 +255,14 @@ codegenExpression (I.BinOpExp leftExp binaryOp rightExp) = do
   typeCheck leftType rightType
 
   let fn = case (binaryOp, leftType) of
-           (I.OpEQ, _) -> icmp IP.EQ
+           (I.OpEQ, I.BooleanType) -> icmp IP.EQ
+           (I.OpEQ, I.IntegerType) -> icmp IP.EQ
            (I.OpLT, I.IntegerType) -> icmp IP.SLT
            (I.OpLE, I.IntegerType) -> icmp IP.SLE
            (I.OpGT, I.IntegerType) -> icmp IP.SGT
            (I.OpGE, I.IntegerType) -> icmp IP.SLE
-           (I.OpNE, _) -> icmp IP.NE
+           (I.OpNE, I.BooleanType) -> icmp IP.NE
+           (I.OpNE, I.IntegerType) -> icmp IP.NE
            (I.OpAdd, I.IntegerType) -> genArithCall leftType CallSAddWithOverflow
            (I.OpSub, I.IntegerType) -> genArithCall leftType CallSSubWithOverflow
            (I.OpOr, I.BooleanType) -> or
@@ -314,6 +313,10 @@ codegenExpression (I.CallExpression name exps) = do
       argOps <- codegenArgs args exps
       op <- callFun (typeToLLVM rtype) fun argOps []
       return (rtype, op)
+
+codegenExpression (I.StringLiteralExpression str) = do
+  op <- withLoc emitString str
+  return (I.StringType, op)
 
 -- | Generate a division operation with division by zero check.
 --

@@ -11,7 +11,7 @@ data VarDec = VarDec [Located ID] (Located Type) deriving Show
 
 newtype ID = ID {getID :: T.Text} deriving (Show, Eq, Ord)
 
-data Type = IntegerType | BooleanType deriving (Show, Eq, Ord)
+data Type = IntegerType | BooleanType | StringType deriving (Show, Eq, Ord)
 
 newtype Number = Number Integer deriving (Show, Eq, Ord)
 
@@ -26,7 +26,7 @@ data Statement = IfStatement (NonEmpty ConditionWithStatements) Statements
                | AssignStatement (Located ID) (Located Expression)
                | CallStatement (Located ID) [Located Expression]
                | InputStatement (Located ID)
-               | OutputStatement ExpressionOrString
+               | OutputStatement (Located Expression)
                | NullStatement
                | BreakStatement
                | ReturnStatement
@@ -39,15 +39,13 @@ type Statements = [Located Statement]
 
 type ConditionWithStatements = (Located Expression, Statements)
 
-data ExpressionOrString = Exp (Located Expression)
-                        | Str (Located T.Text) deriving Show
-
 data Expression = UnOpExp UnaryOp (Located Expression)
                 | BinOpExp (Located Expression) BinaryOp (Located Expression)
                 | NumberExpression Number
                 | BoolExpression Bool
                 | IdExpression (Located ID)
                 | CallExpression (Located ID) [Located Expression]
+                | StringLiteralExpression (Located T.Text)
                 deriving Show
 
 data UnaryOp = OpNot | OpNeg deriving (Show, Eq, Ord)

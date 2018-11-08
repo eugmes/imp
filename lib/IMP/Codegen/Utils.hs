@@ -118,6 +118,7 @@ constZero ty = ConstantOperand $ C.Int (typeBits ty) 0
 typeToLLVM :: I.Type -> Type
 typeToLLVM I.IntegerType = integer
 typeToLLVM I.BooleanType = boolean
+typeToLLVM I.StringType = stringType
 
 mkName :: T.Text -> Name
 mkName = Name . toShort . TE.encodeUtf8
