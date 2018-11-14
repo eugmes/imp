@@ -19,6 +19,7 @@ import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.IntegerPredicate as IP
 import Control.Monad
 import qualified Data.Text as T
+import Text.Megaparsec.Pos (unPos) -- FIXME: Don't use megeparsec here
 
 compileProgram :: CodegenOptions -> I.Program -> Either (Located CodegenError) AST.Module
 compileProgram opts = execGlobalCodegen opts . codegenProgram
@@ -318,6 +319,13 @@ codegenExpression (I.StringLiteralExpression str) = do
   op <- withLoc emitString str
   return (I.StringType, op)
 
+raiseConstraintError :: SubCodegen ()
+raiseConstraintError = do
+  loc <- currentLoc
+  fileNameOp <- emitString (T.pack $ sourceName loc)
+  let lineNumOp = ConstantOperand $ C.Int (typeBits integer) $ fromIntegral $ unPos $ sourceLine loc
+  apiProcCall CallConstraintErrorEx [fileNameOp, lineNumOp]
+
 -- | Generate a division operation with division by zero check.
 --
 -- TODO Make check optional
@@ -329,7 +337,7 @@ genDivOp ty fn leftOp rightOp = mdo
   cbr condOp exB divB
 
   exB <- block "div.ex"
-  apiProcCall CallDivideByZeroEx []
+  raiseConstraintError
   unreachable
 
   divB <- block "div"
@@ -346,7 +354,7 @@ genArithCall ty c leftOp rightOp = mdo
   cbr obit exB arithB
 
   exB <- block "arith.ex"
-  apiProcCall CallIntegerOverflowEx []
+  raiseConstraintError
   unreachable
 
   arithB <- block "arith"

@@ -40,14 +40,9 @@ void _IMP_newline(void)
     printf("\n");
 }
 
-void _IMP_divide_by_zero_ex(void)
+void _IMP_constraint_error_ex(const char *file_name, int32_t line_no)
 {
-    fprintf(stderr, "IMP ERROR: divide by zero\n");
-    exit(EXIT_FAILURE);
-}
-
-void _IMP_integer_overflow_ex(void)
-{
-    fprintf(stderr, "IMP ERROR: integer overflow\n");
+    /* TODO: Add error description. */
+    fprintf(stderr, "raised CONSTRAINT_ERROR : %s:%"PRId32"\n", file_name, line_no);
     exit(EXIT_FAILURE);
 }

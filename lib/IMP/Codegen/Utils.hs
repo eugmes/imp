@@ -46,8 +46,7 @@ data StandardCall = CallInputInteger
                   | CallSAddWithOverflow
                   | CallSSubWithOverflow
                   | CallSMulWithOverflow
-                  | CallDivideByZeroEx
-                  | CallIntegerOverflowEx
+                  | CallConstraintErrorEx
                   deriving (Show, Ord, Bounded, Eq)
 
 stdCallName :: StandardCall -> Name
@@ -61,8 +60,7 @@ stdCallName CallNewline = "_IMP_newline"
 stdCallName CallSAddWithOverflow = "llvm.sadd.with.overflow.i32"
 stdCallName CallSSubWithOverflow = "llvm.ssub.with.overflow.i32"
 stdCallName CallSMulWithOverflow = "llvm.smul.with.overflow.i32"
-stdCallName CallDivideByZeroEx = "_IMP_divide_by_zero_ex"
-stdCallName CallIntegerOverflowEx = "_IMP_integer_overflow_ex"
+stdCallName CallConstraintErrorEx = "_IMP_constraint_error_ex"
 
 stdCallType :: StandardCall -> Type
 stdCallType CallInputInteger = integer
@@ -78,12 +76,12 @@ stdCallArgs CallOutputString = [(stringType, "s")]
 stdCallArgs CallSAddWithOverflow = [(integer, "a"), (integer, "b")]
 stdCallArgs CallSSubWithOverflow = [(integer, "a"), (integer, "b")]
 stdCallArgs CallSMulWithOverflow = [(integer, "a"), (integer, "b")]
+stdCallArgs CallConstraintErrorEx = [(stringType, "file_name"), (integer, "line_no")]
 stdCallArgs _ = []
 
 stdCallAttrs :: StandardCall -> [FA.FunctionAttribute]
 stdCallAttrs CallHalt = [FA.NoReturn]
-stdCallAttrs CallDivideByZeroEx = [FA.NoReturn]
-stdCallAttrs CallIntegerOverflowEx = [FA.NoReturn]
+stdCallAttrs CallConstraintErrorEx = [FA.NoReturn]
 stdCallAttrs _ = []
 
 stdCallOp :: StandardCall -> Operand
