@@ -35,7 +35,7 @@ library
                      , IMP.SourceLoc
                      , Test.Tasty.IMP
   other-modules:       Paths_imp
-  ghc-options:         -Wall -fno-warn-name-shadowing
+  ghc-options:         -Wall -fno-warn-name-shadowing -Wcompat
   build-depends:       base >= 4.7 && < 5
                      , megaparsec == 6.*
                      , text
@@ -58,7 +58,7 @@ executable impc
   hs-source-dirs:      src
   main-is:             Main.hs
   other-modules:       Paths_imp
-  ghc-options:         -rtsopts -Wall -fno-warn-name-shadowing
+  ghc-options:         -rtsopts -Wall -fno-warn-name-shadowing -Wcompat
   build-depends:       base
                      , imp
                      , megaparsec == 6.*
