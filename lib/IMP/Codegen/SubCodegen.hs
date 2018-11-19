@@ -20,8 +20,7 @@ module IMP.Codegen.SubCodegen
     , ret
     , unreachable
     , entry
-    , callFun
-    , callProc
+    , callFunc
     , withLoopExit
     , getVar
     , apiFunCall
@@ -38,6 +37,7 @@ import qualified IMP.SymbolTable as Tab
 import IMP.SourceLoc
 import IMP.Codegen.GlobalCodegen
 import IMP.Codegen.Error
+import IMP.Types
 import qualified LLVM.AST as AST
 import LLVM.AST hiding (functionAttributes, metadata, mkName)
 import qualified LLVM.AST.CallingConvention as CC
@@ -216,10 +216,10 @@ uniqueName nm ns =
     Nothing -> (nm, Map.insert nm 1 ns)
     Just ix -> (nm <> showt ix, Map.insert nm (ix + 1) ns)
 
-defineLocalVar :: I.ID -> I.Type -> Operand -> SubCodegen ()
-defineLocalVar name ty x = do
+defineLocalVar :: I.ID -> I.Type -> IsConstant -> Operand -> SubCodegen ()
+defineLocalVar name ty isConst x = do
   syms <- gets symtab
-  case Tab.insert name (SymbolVariable ty, x) syms of
+  case Tab.insert name (SymbolVariable ty isConst, x) syms of
     Left _ ->
       throwLocatedError $ LocalRedefinition name
     Right syms' ->
@@ -268,13 +268,24 @@ load :: Type -> Operand -> SubCodegen Operand
 load ty ptr =
   instr ty $ Load False ptr Nothing 0 []
 
-callFun :: Type -> Operand -> [Operand] -> [FA.FunctionAttribute] -> SubCodegen Operand
-callFun retty fun args attrs =
-  instr retty $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
-
-callProc :: Operand -> [Operand] -> [FA.FunctionAttribute] -> SubCodegen ()
-callProc fun args attrs =
-  voidInstr $ Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
+callFunc :: Operand -> [Operand] -> [FA.FunctionAttribute] -> [Type] -> SubCodegen [Operand]
+callFunc fun args attrs rettys = do
+  let retty = case rettys of
+        [] -> VoidType
+        [ty] -> ty
+        tys -> StructureType False tys
+      callInstr = Call Nothing CC.C [] (Right fun) (zip args (repeat [])) (Right <$> attrs) []
+  case retty of
+    VoidType -> do
+      voidInstr callInstr
+      pure []
+    _ -> do
+      op <- instr retty callInstr
+      case rettys of
+        [_] -> pure [op]
+        tys ->
+          forM (zip tys [0..]) $ \(ty, idx) ->
+            instr ty $ ExtractValue op [idx] []
 
 terminator :: Named Terminator -> SubCodegen ()
 terminator trm = do
@@ -296,7 +307,9 @@ unreachable = terminator $ Do $ Unreachable []
 apiFunCall :: StandardCall -> [Operand] -> SubCodegen Operand
 apiFunCall c args = do
   useStdCall c
-  callFun retty op args attrs
+  callFunc op args attrs [retty] >>= \case
+    [res] -> pure res
+    _ -> throwLocatedError $ InternalError "Unexpected return value for builtin function"
  where
   retty = stdCallType c
   op = stdCallOp c
@@ -305,7 +318,9 @@ apiFunCall c args = do
 apiProcCall :: StandardCall -> [Operand] -> SubCodegen ()
 apiProcCall c args = do
   useStdCall c
-  callProc op args attrs
+  callFunc op args attrs [] >>= \case
+    [] -> pure ()
+    _ -> throwLocatedError $ InternalError "Unexpected return value for builtin procedure"
  where
   op = stdCallOp c
   attrs = stdCallAttrs c

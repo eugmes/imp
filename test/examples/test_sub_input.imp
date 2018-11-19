@@ -1,0 +1,13 @@
+procedure sub (a : out integer) is
+begin
+  output("Enter integer: ");
+  input(a);
+end sub;
+
+procedure main () is
+  var a : integer;
+begin
+  a = 10;
+  call sub(a);
+  output(a); newline;
+end main;

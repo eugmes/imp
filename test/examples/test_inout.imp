@@ -1,0 +1,22 @@
+procedure proc (a, b : out integer) is
+begin
+  a = 42;
+  b = 43;
+end proc;
+
+procedure proc1 (a, b : in out integer) is
+begin
+  a = a + 42;
+  b = b + 43;
+end proc1;
+
+procedure main () is
+  var x, y : integer;
+begin
+  call proc (x, y);
+  output(x); newline;
+  output(y); newline;
+  call proc1 (x, y);
+  output(x); newline;
+  output(y); newline;
+end main;

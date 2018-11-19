@@ -33,6 +33,7 @@ library
                      , IMP.Emit
                      , IMP.SymbolTable
                      , IMP.SourceLoc
+                     , IMP.Types
                      , Test.Tasty.IMP
   other-modules:       Paths_imp
   ghc-options:         -Wall -fno-warn-name-shadowing -Wcompat

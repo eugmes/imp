@@ -19,7 +19,12 @@ data Subroutine = Procedure (Located ID) [Located ParamList] [Located VarDec] St
                 | Function (Located ID) [Located ParamList] (Located Type) [Located VarDec] Statements
                 deriving Show
 
-data ParamList = ParamList [Located ID] (Located Type) deriving Show
+data ParamList = ParamList [Located ID] Mode (Located Type) deriving Show
+
+data Mode = ModeIn
+          | ModeOut
+          | ModeInOut
+          deriving (Eq, Ord, Show)
 
 data Statement = IfStatement (NonEmpty ConditionWithStatements) Statements
                | WhileStatement (Located Expression) Statements

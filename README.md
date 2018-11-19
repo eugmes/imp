@@ -44,3 +44,5 @@ All of the extensions are taken from [Ada](http://www.ada-auth.org/standards/12r
   - String literals can have embedded quotation marks by repeating them twice.
 
   - If expressions can have additional `elsif` parts.
+
+  - Function and procedure arguments can have `in`, `out`, and `in out` modes.

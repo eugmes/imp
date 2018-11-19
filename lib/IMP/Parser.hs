@@ -67,8 +67,8 @@ rwords = traverse_ rword
 
 rws :: [T.Text]
 rws = [ "and", "begin", "boolean", "break", "call", "else", "elsif", "end"
-      , "false", "function", "halt", "if", "input", "integer"
-      , "is", "loop", "newline", "not", "null", "or", "output"
+      , "false", "function", "halt", "if", "in", "input", "integer"
+      , "is", "loop", "newline", "not", "null", "or", "out", "output"
       , "procedure", "return", "then", "true", "var", "while"
       ]
 
@@ -227,7 +227,13 @@ procBody :: Parser Statements
 procBody = between (rword "begin") (rword "end") statements
 
 paramList :: Parser ParamList
-paramList = ParamList <$> (identifier `sepBy1` comma) <* colon <*> typeName
+paramList = ParamList <$> (identifier `sepBy1` comma) <* colon <*> mode <*> typeName
+
+mode :: Parser Mode
+mode = ModeInOut <$ try (rwords ["in", "out"])
+   <|> ModeIn <$ try (rword "in")
+   <|> ModeOut <$ try (rword "out")
+   <|> pure ModeIn
 
 paramLists :: Parser [Located ParamList]
 paramLists = located paramList `sepBy` semicolon

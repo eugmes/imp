@@ -22,6 +22,7 @@ import IMP.AST (getID)
 import qualified IMP.SymbolTable as Tab
 import IMP.SourceLoc
 import IMP.Codegen.Error
+import IMP.Types
 import qualified LLVM.AST as AST
 import LLVM.AST hiding (type', functionAttributes, metadata, mkName)
 import LLVM.AST.Type hiding (void)
@@ -123,38 +124,69 @@ addDefn d = do
   let defs = moduleDefinitions m
   modify $ \s -> s { currentModule = m { moduleDefinitions = defs ++ [d] }}
 
+-- | Convert subprogram prameter type to LLVM type
+--
+-- Currently all parameters are passed by value
+--
+paramTypeToLLVM :: Argument -> Type
+paramTypeToLLVM (argty, _) = typeToLLVM argty
+
+outArgTypes :: [Argument] -> [Type]
+outArgTypes = map paramTypeToLLVM . filter (argReturned . argumentHandling)
+
+filterInArgs :: [Argument] -> [Argument]
+filterInArgs = filter (argInitialized . argumentHandling)
+
+functionReturnType :: I.Type -> [Argument] -> Type
+functionReturnType retty argtys =
+  case typeToLLVM retty : outArgTypes argtys of
+    [ty] -> ty
+    tys -> StructureType False tys
+
+procedureReturnType :: [Argument] -> Type
+procedureReturnType argtys =
+  case outArgTypes argtys of
+  [] -> VoidType
+  [ty] -> ty
+  tys -> StructureType False tys
+
 -- | Declares function in global symbol table
-declareFun :: I.ID -> I.Type -> [I.Type] -> GlobalCodegen ()
+declareFun :: I.ID -> I.Type -> [Argument] -> GlobalCodegen ()
 declareFun label retty argtys = addSym symt t label
  where
   symt = SymbolFunction retty argtys
-  t = ptr $ FunctionType (typeToLLVM retty) (map typeToLLVM argtys) False
+  t = ptr $ FunctionType rt (map paramTypeToLLVM $ filterInArgs argtys) False
+  rt = functionReturnType retty argtys
 
 -- | Declares procedure in global symbol table
-declareProc :: I.ID -> [I.Type] -> GlobalCodegen ()
+declareProc :: I.ID -> [Argument] -> GlobalCodegen ()
 declareProc label argtys = addSym symt t label
  where
   symt = SymbolProcedure argtys
-  t = ptr $ FunctionType VoidType (map typeToLLVM argtys) False
+  t = ptr $ FunctionType (procedureReturnType argtys) (map paramTypeToLLVM $ filterInArgs argtys) False
 
--- | Adds global function definition
-defineSub :: I.ID -> Maybe I.Type -> [(I.Type, Located I.ID)] -> [BasicBlock] -> GlobalCodegen ()
+-- | Adds global subprogram definition
+defineSub :: I.ID -> Maybe I.Type -> [(I.Type, I.Mode, Located I.ID)] -> [BasicBlock] -> GlobalCodegen ()
 defineSub label retty argtys body = addDefn def
  where
-  t = maybe VoidType typeToLLVM retty
+  argtys' = map (\(ty, mode, _id) -> (ty, mode)) argtys
+  rt = case retty of
+    Nothing -> procedureReturnType argtys'
+    Just ty -> functionReturnType ty argtys'
+
   def = GlobalDefinition $
           functionDefaults { name = (mkName . getID) label
-                           , parameters = ([Parameter (typeToLLVM ty) ((mkName . getID . unLoc)  nm) []
-                                                   | (ty, nm) <- argtys], False)
-                           , returnType = t
+                           , parameters = ([Parameter (paramTypeToLLVM (ty, mode)) ((mkName . getID . unLoc)  nm) []
+                                                   | (ty, mode, nm) <- argtys, mode /= I.ModeOut], False)
+                           , returnType = rt
                            , basicBlocks = body
                            }
 
 -- | Add global variable definition
 --
 -- Also adds this variable to symbol table
-defineVar :: I.Type -> I.ID -> GlobalCodegen ()
-defineVar ty label = addSym (SymbolVariable ty) (ptr t) label >> addDefn def
+defineVar :: I.Type -> IsConstant -> I.ID -> GlobalCodegen ()
+defineVar ty isConst label = addSym (SymbolVariable ty isConst) (ptr t) label >> addDefn def
  where
   n = mkName $ getID label
   t = typeToLLVM ty

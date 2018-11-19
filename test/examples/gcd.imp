@@ -4,29 +4,30 @@ begin
 end is_even;
 
 function gcd (a, b : integer) return integer is
-  var d : integer;
+  var v_a, v_b, d : integer;
 begin
+  v_a = a; v_b = b;
   d = 1;
 
-  while is_even (a) and is_even(b) loop
-    a = a / 2;
-    b = b / 2;
+  while is_even (v_a) and is_even(v_b) loop
+    v_a = v_a / 2;
+    v_b = v_b / 2;
     d = d * 2;
   end loop;
 
-  while a # b loop
-    if is_even (a) then
-      a = a / 2;
-    elsif is_even (b) then
-      b = b / 2;
-    elsif a > b then
-      a = (a - b) / 2;
+  while v_a # v_b loop
+    if is_even (v_a) then
+      v_a = v_a / 2;
+    elsif is_even (v_b) then
+      v_b = v_b / 2;
+    elsif v_a > v_b then
+      v_a = (v_a - v_b) / 2;
     else
-      b = (b - a) / 2;
+      v_b = (v_b - v_a) / 2;
     end if;
   end loop;
 
-  return a * d;
+  return v_a * d;
 end gcd;
 
 procedure main () is

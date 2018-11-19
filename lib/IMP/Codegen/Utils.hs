@@ -2,7 +2,6 @@
 
 module IMP.Codegen.Utils
   ( StandardCall(..)
-  , SymbolType(..)
   , SymbolTable
   , stdCallName
   , stdCallType
@@ -21,6 +20,7 @@ module IMP.Codegen.Utils
 
 import qualified IMP.AST as I
 import qualified IMP.SymbolTable as Tab
+import IMP.Types
 
 import LLVM.AST hiding (mkName)
 import qualified LLVM.AST.FunctionAttribute as FA
@@ -31,11 +31,6 @@ import Data.Int
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.ByteString.Short (toShort)
-
-data SymbolType = SymbolVariable I.Type
-                | SymbolProcedure [I.Type]
-                | SymbolFunction I.Type [I.Type]
-                deriving Show
 
 data StandardCall = CallInputInteger
                   | CallOutputInteger
