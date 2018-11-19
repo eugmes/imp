@@ -105,8 +105,12 @@ codegenSub' name retty params vars body = do
           pure $ Just (ty, varPtr)
     codegenLocals vars
     mapM_ (withLoc codegenStatement) body
-    -- TODO trap functions that don't call return
-    br exit
+    case retty of
+      Just _ -> do
+        raiseProgramError
+        unreachable
+      Nothing ->
+        br exit
 
     exit <- block "exit"
     if unLoc name == I.ID "main"
@@ -393,12 +397,18 @@ codegenExpression (I.StringLiteralExpression str) = do
   op <- withLoc emitString str
   mkValue (I.StringType, op)
 
-raiseConstraintError :: SubCodegen ()
-raiseConstraintError = do
+raiseError :: StandardCall -> SubCodegen ()
+raiseError call = do
   loc <- currentLoc
   fileNameOp <- emitString (T.pack $ sourceName loc)
   let lineNumOp = ConstantOperand $ C.Int (typeBits integer) $ fromIntegral $ unPos $ sourceLine loc
-  apiProcCall CallConstraintErrorEx [fileNameOp, lineNumOp]
+  apiProcCall call [fileNameOp, lineNumOp]
+
+raiseConstraintError :: SubCodegen ()
+raiseConstraintError = raiseError CallConstraintErrorEx
+
+raiseProgramError :: SubCodegen ()
+raiseProgramError = raiseError CallProgramErrorEx
 
 -- | Generate a division operation with division by zero check.
 --

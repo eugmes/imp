@@ -46,3 +46,10 @@ void _IMP_constraint_error_ex(const char *file_name, int32_t line_no)
     fprintf(stderr, "raised CONSTRAINT_ERROR : %s:%"PRId32"\n", file_name, line_no);
     exit(EXIT_FAILURE);
 }
+
+void _IMP_program_error_ex(const char *file_name, int32_t line_no)
+{
+    /* TODO: Add error description. */
+    fprintf(stderr, "raised PROGRAM_ERROR : %s:%"PRId32"\n", file_name, line_no);
+    exit(EXIT_FAILURE);
+}

@@ -10,5 +10,6 @@ void _IMP_output_string(const char *);
 void _IMP_halt(void);
 void _IMP_newline(void);
 void _IMP_constraint_error_ex(const char *file_name, int32_t line_no) __attribute__((noreturn));
+void _IMP_program_error_ex(const char *file_name, int32_t line_no) __attribute__((noreturn));
 
 #endif

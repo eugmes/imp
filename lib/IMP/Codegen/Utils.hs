@@ -42,6 +42,7 @@ data StandardCall = CallInputInteger
                   | CallSSubWithOverflow
                   | CallSMulWithOverflow
                   | CallConstraintErrorEx
+                  | CallProgramErrorEx
                   deriving (Show, Ord, Bounded, Eq)
 
 stdCallName :: StandardCall -> Name
@@ -56,6 +57,7 @@ stdCallName CallSAddWithOverflow = "llvm.sadd.with.overflow.i32"
 stdCallName CallSSubWithOverflow = "llvm.ssub.with.overflow.i32"
 stdCallName CallSMulWithOverflow = "llvm.smul.with.overflow.i32"
 stdCallName CallConstraintErrorEx = "_IMP_constraint_error_ex"
+stdCallName CallProgramErrorEx = "_IMP_program_error_ex"
 
 stdCallType :: StandardCall -> Type
 stdCallType CallInputInteger = integer
@@ -72,11 +74,13 @@ stdCallArgs CallSAddWithOverflow = [(integer, "a"), (integer, "b")]
 stdCallArgs CallSSubWithOverflow = [(integer, "a"), (integer, "b")]
 stdCallArgs CallSMulWithOverflow = [(integer, "a"), (integer, "b")]
 stdCallArgs CallConstraintErrorEx = [(stringType, "file_name"), (integer, "line_no")]
+stdCallArgs CallProgramErrorEx = [(stringType, "file_name"), (integer, "line_no")]
 stdCallArgs _ = []
 
 stdCallAttrs :: StandardCall -> [FA.FunctionAttribute]
 stdCallAttrs CallHalt = [FA.NoReturn]
 stdCallAttrs CallConstraintErrorEx = [FA.NoReturn]
+stdCallAttrs CallProgramErrorEx = [FA.NoReturn]
 stdCallAttrs _ = []
 
 stdCallOp :: StandardCall -> Operand
