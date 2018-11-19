@@ -1,90 +1,104 @@
-name:                imp
-version:             0.1.0.0
-synopsis:            Compiler for IMP programming language
-description:         This is a compiler for IMP programming language
-                     implemented in Haskell. It uses LLVM as compiler
-                     backend.
-homepage:            https://github.com/eugmes/imp#readme
-license:             MIT
-license-file:        LICENSE
-author:              Ievgenii Meshcheriakov
-maintainer:          eugen@debian.org
-copyright:           2017 Ievgenii Meshcheriakov
-category:            Compiler
-build-type:          Simple
-extra-source-files:  README.md
-cabal-version:       >=1.10
-data-files:          stdlib/impstd.c
-                   , stdlib/impstd.h
+-- This file has been generated from package.yaml by hpack version 0.28.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 366a33132d1c44bb6522b5b2d0e016a91b3a7c059ec3d82a1c490da9fa246286
+
+name:           imp
+version:        0.1.0.0
+synopsis:       Compiler for IMP programming language
+description:    This is a compiler for IMP programming language implemented in Haskell. It uses LLVM as compiler backend.
+category:       Compiler
+homepage:       https://github.com/eugmes/imp#readme
+bug-reports:    https://github.com/eugmes/imp/issues
+author:         Ievgenii Meshcheriakov <eugen@debian.org>
+copyright:      2017-2018 Ievgenii Meshcheriakov
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
+data-files:
+    stdlib/impstd.c
+    stdlib/impstd.h
 
 source-repository head
-  type:                git
-  location:            https://github.com/eugmes/imp.git
+  type: git
+  location: https://github.com/eugmes/imp
 
 library
-  hs-source-dirs:      lib
-  exposed-modules:     IMP.AST
-                     , IMP.Parser
-                     , IMP.Parser.Error
-                     , IMP.Codegen.GlobalCodegen
-                     , IMP.Codegen.SubCodegen
-                     , IMP.Codegen.Utils
-                     , IMP.Codegen.Error
-                     , IMP.Emit
-                     , IMP.SymbolTable
-                     , IMP.SourceLoc
-                     , IMP.Types
-                     , Test.Tasty.IMP
-  other-modules:       Paths_imp
-  ghc-options:         -Wall -fno-warn-name-shadowing -Wcompat
-  build-depends:       base >= 4.7 && < 5
-                     , megaparsec == 6.*
-                     , text
-                     , llvm-hs-pure == 7.*
-                     , containers
-                     , mtl
-                     , bytestring
-                     , utf8-string
-                     , composition-extra
-                     , text-show
-                     , tasty
-                     , temporary
-                     , process-extras
-                     , filepath
-                     , stringbuilder
-  default-language:    Haskell2010
+  exposed-modules:
+      IMP.AST
+      IMP.Codegen.Error
+      IMP.Codegen.GlobalCodegen
+      IMP.Codegen.SubCodegen
+      IMP.Codegen.Utils
+      IMP.Emit
+      IMP.Parser
+      IMP.Parser.Error
+      IMP.SourceLoc
+      IMP.SymbolTable
+      IMP.Types
+      Test.Tasty.IMP
+  other-modules:
+      Paths_imp
+  hs-source-dirs:
+      lib
+  ghc-options: -Wall -fno-warn-name-shadowing -Wcompat
+  build-depends:
+      base >=4.7 && <5
+    , bytestring
+    , composition-extra
+    , containers
+    , filepath
+    , llvm-hs-pure ==7.*
+    , megaparsec ==6.*
+    , mtl
+    , process-extras
+    , stringbuilder
+    , tasty
+    , temporary
+    , text
+    , text-show
+    , utf8-string
+  default-language: Haskell2010
 
 executable impc
-  hs-source-dirs:      src
-  main-is:             Main.hs
-  other-modules:       Paths_imp
-  ghc-options:         -rtsopts -Wall -fno-warn-name-shadowing -Wcompat
-  build-depends:       base
-                     , imp
-                     , megaparsec == 6.*
-                     , text
-                     , llvm-hs == 7.*
-                     , bytestring
-                     , optparse-applicative
-                     , containers
-                     , temporary
-                     , filepath
-                     , process
-  default-language:    Haskell2010
+  main-is: Main.hs
+  other-modules:
+      Paths_imp
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -fno-warn-name-shadowing -Wcompat
+  build-depends:
+      base
+    , bytestring
+    , containers
+    , filepath
+    , imp
+    , llvm-hs ==7.*
+    , megaparsec ==6.*
+    , optparse-applicative
+    , process
+    , temporary
+    , text
+  default-language: Haskell2010
 
 test-suite testsuite
   type: exitcode-stdio-1.0
+  main-is: TestSuite.hs
+  other-modules:
+      CompilerTests
+      IMP.Test.Parser
+      IMP.Test.Tests
+      Paths_imp
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -fno-warn-name-shadowing -Wcompat
   build-depends:
       base
     , imp
-    , megaparsec == 6.*
+    , megaparsec ==6.*
     , tasty
     , tasty-hunit
     , text
-  other-modules:
-    IMP.Test.Parser
-    IMP.Test.Tests
-    CompilerTests
-  hs-source-dirs: test
-  main-is: TestSuite.hs
   default-language: Haskell2010

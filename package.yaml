@@ -1,0 +1,71 @@
+name: imp
+version: 0.1.0.0
+synopsis: Compiler for IMP programming language
+description:
+  This is a compiler for IMP programming language
+  implemented in Haskell. It uses LLVM as compiler
+  backend.
+category: Compiler
+author: Ievgenii Meshcheriakov <eugen@debian.org>
+copyright: 2017-2018 Ievgenii Meshcheriakov
+license: MIT
+license-file: LICENSE
+build-type: Simple
+github: eugmes/imp
+
+data-files:
+  - stdlib/impstd.c
+  - stdlib/impstd.h
+
+ghc-options:
+  - -Wall
+  - -fno-warn-name-shadowing
+  - -Wcompat
+
+library:
+  source-dirs: lib
+  dependencies:
+    - base >= 4.7 && < 5
+    - megaparsec == 6.*
+    - text
+    - llvm-hs-pure == 7.*
+    - containers
+    - mtl
+    - bytestring
+    - utf8-string
+    - composition-extra
+    - text-show
+    - tasty
+    - temporary
+    - process-extras
+    - filepath
+    - stringbuilder
+
+executables:
+  impc:
+    source-dirs: src
+    main: Main.hs
+    dependencies:
+      - base
+      - imp
+      - megaparsec == 6.*
+      - text
+      - llvm-hs == 7.*
+      - bytestring
+      - optparse-applicative
+      - containers
+      - temporary
+      - filepath
+      - process
+
+tests:
+  testsuite:
+    source-dirs: test
+    main: TestSuite.hs
+    dependencies:
+      - base
+      - imp
+      - megaparsec == 6.*
+      - tasty
+      - tasty-hunit
+      - text
