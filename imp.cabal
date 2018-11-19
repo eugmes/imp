@@ -41,7 +41,6 @@ library
                      , megaparsec == 6.*
                      , text
                      , llvm-hs-pure == 7.*
-                     , llvm-hs == 7.*
                      , containers
                      , mtl
                      , bytestring
@@ -81,8 +80,6 @@ test-suite testsuite
     , megaparsec == 6.*
     , tasty
     , tasty-hunit
-    , tasty-quickcheck
-    , QuickCheck
     , text
   other-modules:
     IMP.Test.Parser
