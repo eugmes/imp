@@ -1,10 +1,5 @@
-dist: xenial
+dist: bionic
 language: c
-
-env:
-  global:
-  - GCC=gcc-5
-  - GXX=g++-5
 
 cache:
   directories:
