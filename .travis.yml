@@ -11,8 +11,6 @@ addons:
     - libgmp-dev
     - llvm-9-dev
     - clang-9
-    sources:
-    - llvm-toolchain-xenial-9
 
 before_install:
 - mkdir -p ~/.local/bin
