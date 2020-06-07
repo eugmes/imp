@@ -1,6 +1,5 @@
-sudo: false
-dist: trusty
-language: generic
+dist: xenial
+language: c
 
 env:
   global:
@@ -14,21 +13,16 @@ cache:
 addons:
   apt:
     packages:
-    - gcc-5
-    - g++-5
     - libgmp-dev
-    - llvm-7-dev
-    - clang-7
+    - llvm-9-dev
+    - clang-9
     sources:
-    - llvm-toolchain-trusty-7
-    - ubuntu-toolchain-r-test
+    - llvm-toolchain-xenial-9
 
 before_install:
 - mkdir -p ~/.local/bin
 - export PATH=$HOME/.local/bin:$PATH
 - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
-- export CC=/usr/bin/$GCC
-- export CXX=/usr/bin/$GXX
 
 install:
 - stack --no-terminal --install-ghc test --only-dependencies

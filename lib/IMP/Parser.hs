@@ -31,7 +31,7 @@ sc :: Parser ()
 sc = L.space space1 comment empty
 
 located :: Parser a -> Parser (Located a)
-located m = Located <$> getPosition <*> m
+located m = Located <$> getSourcePos <*> m
 
 lexeme' :: Parser a -> Parser a
 lexeme' = L.lexeme sc

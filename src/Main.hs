@@ -6,7 +6,6 @@ import IMP.Parser
 import IMP.Codegen.Error
 import IMP.Emit
 import IMP.AST (Program)
-import Data.Text (Text)
 import qualified Data.Text.IO as TIO
 import qualified Text.Megaparsec as P
 import LLVM
@@ -21,7 +20,6 @@ import qualified LLVM.CodeGenOpt as CodeGenOpt
 import qualified Data.ByteString.Char8 as C
 import LLVM.CommandLine
 import Options.Applicative as Opt
-import Data.Semigroup ((<>))
 import System.Exit
 import Control.Exception
 import Control.Monad
@@ -124,8 +122,8 @@ showingErrorsBy v handler =
     Right r ->
       return r
 
-genCode :: Options -> Text -> FilePath -> Program -> IO ()
-genCode o text name pgm = do
+genCode :: Options -> FilePath -> Program -> IO ()
+genCode o name pgm = do
   setLLVMCommandLineOptions $ llvmOptions o
   withContext $ \context ->
     withTargetFromOptions o $ \target -> do
@@ -133,7 +131,7 @@ genCode o text name pgm = do
       targetTriple <- getTargetMachineTriple target
       let opts = CodegenOptions name dataLayout targetTriple
 
-      ast <- compileProgram opts pgm `showingErrorsBy` locatedErrorPretty text
+      ast <- compileProgram opts pgm `showingErrorsBy` locatedErrorPretty
       withModuleFromAST context ast $ \m -> do
         verify m
         let passes = defaultCuratedPassSetSpec
@@ -173,8 +171,8 @@ run :: Options -> IO ()
 run o = do
   let fileName = inputFile o
   text <- TIO.readFile fileName
-  tree <- P.runParser parser fileName text `showingErrorsBy` P.parseErrorPretty' text
-  let runGenCode opts = genCode opts text fileName tree `catch` \(VerifyException msg) -> do
+  tree <- P.runParser parser fileName text `showingErrorsBy` P.errorBundlePretty
+  let runGenCode opts = genCode opts fileName tree `catch` \(VerifyException msg) -> do
         putStrLn "Verification exception:"
         putStrLn msg
         exitFailure

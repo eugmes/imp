@@ -1,8 +1,10 @@
--- This file has been generated from package.yaml by hpack version 0.28.2.
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 366a33132d1c44bb6522b5b2d0e016a91b3a7c059ec3d82a1c490da9fa246286
+-- hash: 44d6b791288837604c1803be49bdd33320fcf764b6ef7199efa5034dba5b31b7
 
 name:           imp
 version:        0.1.0.0
@@ -12,11 +14,11 @@ category:       Compiler
 homepage:       https://github.com/eugmes/imp#readme
 bug-reports:    https://github.com/eugmes/imp/issues
 author:         Ievgenii Meshcheriakov <eugen@debian.org>
+maintainer:     Ievgenii Meshcheriakov <eugen@debian.org>
 copyright:      2017-2018 Ievgenii Meshcheriakov
 license:        MIT
 license-file:   LICENSE
 build-type:     Simple
-cabal-version:  >= 1.10
 data-files:
     stdlib/impstd.c
     stdlib/impstd.h
@@ -50,8 +52,8 @@ library
     , composition-extra
     , containers
     , filepath
-    , llvm-hs-pure ==7.*
-    , megaparsec ==6.*
+    , llvm-hs-pure ==9.*
+    , megaparsec ==8.*
     , mtl
     , process-extras
     , stringbuilder
@@ -75,8 +77,8 @@ executable impc
     , containers
     , filepath
     , imp
-    , llvm-hs ==7.*
-    , megaparsec ==6.*
+    , llvm-hs ==9.*
+    , megaparsec ==8.*
     , optparse-applicative
     , process
     , temporary
@@ -97,7 +99,7 @@ test-suite testsuite
   build-depends:
       base
     , imp
-    , megaparsec ==6.*
+    , megaparsec ==8.*
     , tasty
     , tasty-hunit
     , text

@@ -9,10 +9,8 @@ module IMP.Codegen.Error
 import IMP.AST
 import IMP.SourceLoc
 import Text.Megaparsec.Error -- TODO use custom class here
-import Text.Megaparsec.Stream
 import Text.Printf
 import Control.Monad.Except
-import qualified Data.Set as Set
 
 data CodegenError = InternalError String
                   | TypeMismatch Type Type -- ^ Types don't match
@@ -75,9 +73,5 @@ throwLocatedError e = do
   throwError $ Located loc e
 
 -- TODO remove this hack and create some custom class
-locatedErrorPretty :: (Stream s, ShowErrorComponent a, LineToken (Token s), ShowToken (Token s)) => s -> Located a -> String
-locatedErrorPretty s e = parseErrorPretty' s err
- where
-  posStack = pure $ getLoc e
-  customE = ErrorCustom $ unLoc e
-  err = FancyError posStack $ Set.singleton customE
+locatedErrorPretty :: ShowErrorComponent a => Located a -> String
+locatedErrorPretty e = showErrorComponent $ unLoc e

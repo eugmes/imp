@@ -26,9 +26,9 @@ library:
   source-dirs: lib
   dependencies:
     - base >= 4.7 && < 5
-    - megaparsec == 6.*
+    - megaparsec == 8.*
     - text
-    - llvm-hs-pure == 7.*
+    - llvm-hs-pure == 9.*
     - containers
     - mtl
     - bytestring
@@ -48,9 +48,9 @@ executables:
     dependencies:
       - base
       - imp
-      - megaparsec == 6.*
+      - megaparsec == 8.*
       - text
-      - llvm-hs == 7.*
+      - llvm-hs == 9.*
       - bytestring
       - optparse-applicative
       - containers
@@ -65,7 +65,7 @@ tests:
     dependencies:
       - base
       - imp
-      - megaparsec == 6.*
+      - megaparsec == 8.*
       - tasty
       - tasty-hunit
       - text
